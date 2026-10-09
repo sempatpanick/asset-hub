@@ -1,0 +1,22 @@
+{
+  "name": "assethub",
+  "version": "0.3.0",
+  "private": true,
+  "workspaces": [
+    "apps/web",
+    "packages/api-client"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace apps/web",
+    "build": "npm run build --workspace apps/web",
+    "typecheck": "npm run typecheck --workspace apps/web",
+    "test:e2e": "playwright test",
+    "generate:api": "openapi-typescript api/openapi.yaml -o packages/api-client/src/schema.d.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0",
+    "openapi-typescript": "7.13.0",
+    "prettier": "3.9.9",
+    "typescript": "5.9.3"
+  }
+}

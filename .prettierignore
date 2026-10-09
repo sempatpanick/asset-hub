@@ -1,0 +1,7 @@
+node_modules/
+package-lock.json
+packages/api-client/src/schema.d.ts
+.local/
+apps/web/.next/
+apps/web/out/
+services/backend/

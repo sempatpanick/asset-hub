@@ -1,0 +1,1093 @@
+openapi: 3.1.0
+info:
+  title: AssetHub API
+  version: 0.3.0
+  description: Persistent asset storage, resumable ingestion, authorized content and project management.
+servers:
+  - url: /v1
+security:
+  - session: []
+  - projectKey: []
+paths:
+  /auth/login:
+    post:
+      operationId: login
+      security: []
+      parameters:
+        [{ in: header, name: Origin, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              {
+                type: object,
+                additionalProperties: false,
+                required: [email, password],
+                properties:
+                  {
+                    email: { type: string, format: email },
+                    password: { type: string },
+                  },
+              }
+      responses:
+        "200":
+          {
+            description: Session created,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/Auth" } },
+              },
+          }
+        "401": { $ref: "#/components/responses/Error" }
+  /auth/me:
+    get:
+      operationId: currentUser
+      responses:
+        "200":
+          {
+            description: Current dashboard user,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/Auth" } },
+              },
+          }
+        "401": { $ref: "#/components/responses/Error" }
+  /auth/logout:
+    post:
+      operationId: logout
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "200": { description: Session revoked }
+        "403": { $ref: "#/components/responses/Error" }
+  /auth/accept-invitation:
+    post:
+      operationId: acceptInvitation
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              {
+                type: object,
+                additionalProperties: false,
+                required: [token, name, password],
+                properties:
+                  {
+                    token: { type: string },
+                    name: { type: string },
+                    password: { type: string, minLength: 12 },
+                  },
+              }
+      responses:
+        "201": { description: Account created }
+        "409": { $ref: "#/components/responses/Error" }
+  /invitations:
+    post:
+      operationId: inviteUser
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              {
+                type: object,
+                additionalProperties: false,
+                required: [email, role],
+                properties:
+                  {
+                    email: { type: string, format: email },
+                    role: { type: string, enum: [admin, member] },
+                  },
+              }
+      responses:
+        "201":
+          {
+            description: One-time invitation URL,
+            content:
+              {
+                application/json:
+                  {
+                    schema:
+                      {
+                        type: object,
+                        required: [url, expires_in],
+                        properties:
+                          {
+                            url: { type: string },
+                            expires_in: { type: string },
+                          },
+                      },
+                  },
+              },
+          }
+        "403": { $ref: "#/components/responses/Error" }
+  /projects:
+    get:
+      operationId: listProjects
+      responses:
+        "200":
+          {
+            description: Authorized projects,
+            content:
+              {
+                application/json:
+                  {
+                    schema:
+                      {
+                        type: object,
+                        required: [items],
+                        properties:
+                          {
+                            items:
+                              {
+                                type: array,
+                                items: { $ref: "#/components/schemas/Project" },
+                              },
+                          },
+                      },
+                  },
+              },
+          }
+    post:
+      operationId: createProject
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody: { $ref: "#/components/requestBodies/Project" }
+      responses:
+        "201":
+          {
+            description: Created project,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/Project" } },
+              },
+          }
+        "400": { $ref: "#/components/responses/Error" }
+  /projects/{id}:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    patch:
+      operationId: updateProject
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody: { $ref: "#/components/requestBodies/Project" }
+      responses:
+        "200": { description: Updated project }
+        "403": { $ref: "#/components/responses/Error" }
+  /projects/{id}/members:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    get:
+      operationId: listMembers
+      responses:
+        "200":
+          {
+            description: Project members,
+            content:
+              {
+                application/json:
+                  {
+                    schema:
+                      {
+                        type: object,
+                        required: [items],
+                        properties:
+                          {
+                            items:
+                              {
+                                type: array,
+                                items: { $ref: "#/components/schemas/Member" },
+                              },
+                          },
+                      },
+                  },
+              },
+          }
+    post:
+      operationId: setMember
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              {
+                type: object,
+                additionalProperties: false,
+                required: [email, role],
+                properties:
+                  {
+                    email: { type: string, format: email },
+                    role: { type: string, enum: [manager, editor, viewer] },
+                  },
+              }
+      responses:
+        "200": { description: Membership saved }
+        "409": { $ref: "#/components/responses/Error" }
+  /api-keys:
+    get:
+      operationId: listKeys
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }]
+      responses:
+        "200":
+          {
+            description: Key metadata without secrets,
+            content:
+              {
+                application/json:
+                  {
+                    schema:
+                      {
+                        type: object,
+                        required: [items],
+                        properties:
+                          {
+                            items:
+                              {
+                                type: array,
+                                items: { $ref: "#/components/schemas/ApiKey" },
+                              },
+                          },
+                      },
+                  },
+              },
+          }
+    post:
+      operationId: createKey
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              {
+                type: object,
+                additionalProperties: false,
+                required: [project_id, name, scopes],
+                properties:
+                  {
+                    project_id: { type: string, format: uuid },
+                    name: { type: string },
+                    scopes:
+                      {
+                        type: array,
+                        minItems: 1,
+                        items:
+                          {
+                            type: string,
+                            enum:
+                              [
+                                "assets:read",
+                                "assets:write",
+                                "assets:delete",
+                                "assets:sign",
+                              ],
+                          },
+                      },
+                    expires_at: { type: [string, "null"], format: date-time },
+                  },
+              }
+      responses:
+        "201":
+          {
+            description: Secret shown once,
+            content:
+              {
+                application/json:
+                  {
+                    schema:
+                      {
+                        type: object,
+                        required: [key, secret],
+                        properties:
+                          {
+                            key: { $ref: "#/components/schemas/ApiKey" },
+                            secret: { type: string },
+                          },
+                      },
+                  },
+              },
+          }
+  /api-keys/{id}:
+    parameters:
+      [
+        { $ref: "#/components/parameters/ID" },
+        { $ref: "#/components/parameters/ProjectID" },
+      ]
+    delete:
+      operationId: revokeKey
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "200": { description: Key revoked }
+        "404": { $ref: "#/components/responses/Error" }
+  /assets:
+    get:
+      operationId: listAssets
+      parameters:
+        - { in: query, name: project_id, schema: { type: string } }
+        - { in: query, name: q, schema: { type: string } }
+        - { in: query, name: status, schema: { type: string } }
+        - {
+            in: query,
+            name: type,
+            schema: { type: string, description: MIME prefix filter },
+          }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          {
+            description: Authorized asset metadata,
+            content:
+              {
+                application/json:
+                  {
+                    schema:
+                      {
+                        type: object,
+                        required: [items, limit, offset],
+                        properties:
+                          {
+                            items:
+                              {
+                                type: array,
+                                items: { $ref: "#/components/schemas/Asset" },
+                              },
+                            limit: { type: integer },
+                            offset: { type: integer },
+                          },
+                      },
+                  },
+              },
+          }
+    post:
+      operationId: uploadSmallAsset
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [project_id, file]
+              properties:
+                project_id: { type: string, format: uuid }
+                file: { type: string, format: binary, description: Up to 8 MiB }
+      responses:
+        "202":
+          description: Queued durable asset
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/Asset" } }
+        "413": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /assets/{id}:
+    parameters:
+      [
+        {
+          in: path,
+          name: id,
+          required: true,
+          schema: { type: string, format: uuid },
+        },
+      ]
+    get:
+      operationId: assetMetadata
+      responses:
+        "200":
+          description: Authorized safe metadata and job progress
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/Asset" } }
+        "404": { $ref: "#/components/responses/Error" }
+    patch:
+      operationId: updateAsset
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                name: { type: string, maxLength: 180 }
+                visibility:
+                  {
+                    type: string,
+                    enum: [private, public],
+                    description: Project manager only,
+                  }
+      responses:
+        "200": { description: Updated; previous signed links revoked }
+        "403": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: deleteAsset
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "202":
+          {
+            description: Content revoked; asynchronous best-effort remote deletion; 30-day backup retention,
+          }
+  /assets/{id}/restore:
+    parameters:
+      [
+        {
+          in: path,
+          name: id,
+          required: true,
+          schema: { type: string, format: uuid },
+        },
+      ]
+    post:
+      operationId: restoreAsset
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "200":
+          {
+            description: Administrator verified retained backup; quota reserved and new content version restored,
+          }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /assets/{id}/content:
+    parameters:
+      - {
+          in: path,
+          name: id,
+          required: true,
+          schema: { type: string, format: uuid },
+        }
+      - {
+          in: header,
+          name: Range,
+          schema: { type: string },
+          description: Single byte range; multipart ranges fall back to full content,
+        }
+      - {
+          in: query,
+          name: token,
+          schema: { type: string },
+          description: Optional signed content capability,
+        }
+      - { in: query, name: download, schema: { type: string, enum: ["1"] } }
+    get:
+      operationId: getContent
+      security: [{ session: [] }, { projectKey: [] }, {}]
+      responses:
+        "200":
+          {
+            description: Authorized or public bytes; safe images and video may display inline,
+          }
+        "206":
+          {
+            description: Single byte range with Content-Range and exact Content-Length,
+          }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "416":
+          {
+            description: Unsatisfiable range; Content-Range includes total size,
+          }
+        "503": { $ref: "#/components/responses/Error" }
+    head:
+      operationId: headContent
+      security: [{ session: [] }, { projectKey: [] }, {}]
+      responses:
+        "200":
+          {
+            description: Authorized metadata headers without retrieving file bytes,
+          }
+        "206": { description: Authorized range headers without a body }
+  /assets/{id}/signed-url:
+    parameters:
+      [
+        {
+          in: path,
+          name: id,
+          required: true,
+          schema: { type: string, format: uuid },
+        },
+      ]
+    post:
+      operationId: signContent
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                expires_in:
+                  { type: integer, minimum: 1, maximum: 86400, default: 900 }
+      responses:
+        "201":
+          description: Content-only capability bound to current asset version
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url, expires_in]
+                properties:
+                  url: { type: string, format: uri }
+                  expires_in: { type: integer }
+  /assets/{id}/retry:
+    parameters:
+      [
+        {
+          in: path,
+          name: id,
+          required: true,
+          schema: { type: string, format: uuid },
+        },
+      ]
+    post:
+      operationId: retryAsset
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "202": { description: Failed asset requeued }
+        "409": { $ref: "#/components/responses/Error" }
+  /overview:
+    get:
+      operationId: overview
+      responses:
+        "200":
+          {
+            description: Authorized persistent totals,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/Overview" } },
+              },
+          }
+  /activity:
+    get:
+      operationId: activity
+      parameters:
+        [
+          { $ref: "#/components/parameters/Limit" },
+          { $ref: "#/components/parameters/Offset" },
+        ]
+      responses:
+        "200":
+          {
+            description: Authorized audit events,
+            content:
+              {
+                application/json:
+                  {
+                    schema:
+                      {
+                        type: object,
+                        required: [items],
+                        properties:
+                          {
+                            items:
+                              {
+                                type: array,
+                                items:
+                                  { $ref: "#/components/schemas/Activity" },
+                              },
+                          },
+                      },
+                  },
+              },
+          }
+  /uploads:
+    get:
+      operationId: listUploads
+      parameters:
+        [
+          { $ref: "#/components/parameters/Limit" },
+          { $ref: "#/components/parameters/Offset" },
+        ]
+      responses:
+        "200":
+          description: Authorized uploads and live provider job status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    {
+                      type: array,
+                      items: { $ref: "#/components/schemas/Upload" },
+                    }
+    post:
+      operationId: createUpload
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [project_id, name, size_bytes]
+              properties:
+                project_id: { type: string, format: uuid }
+                name: { type: string, maxLength: 180 }
+                size_bytes: { type: integer, minimum: 1, maximum: 536870912 }
+                sha256:
+                  {
+                    type: string,
+                    pattern: "^[a-f0-9]{64}$",
+                    description: Optional full-file checksum,
+                  }
+      responses:
+        "201":
+          description: Capacity reserved; session expires after 24 hours
+          content:
+            application/json:
+              { schema: { $ref: "#/components/schemas/Upload" } }
+        "413": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /uploads/{id}:
+    parameters:
+      [
+        {
+          in: path,
+          name: id,
+          required: true,
+          schema: { type: string, format: uuid },
+        },
+      ]
+    get:
+      operationId: getUpload
+      responses:
+        "200":
+          description: Resumable session with immutable received-part checksums
+          content:
+            application/json:
+              { schema: { $ref: "#/components/schemas/Upload" } }
+        "404": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: cancelUpload
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "200":
+          {
+            description: Unfinished transfer cancelled; staging cleanup retried by worker,
+          }
+        "409": { $ref: "#/components/responses/Error" }
+  /uploads/{id}/parts/{index}:
+    parameters:
+      - {
+          in: path,
+          name: id,
+          required: true,
+          schema: { type: string, format: uuid },
+        }
+      - {
+          in: path,
+          name: index,
+          required: true,
+          schema: { type: integer, minimum: 0 },
+        }
+    put:
+      operationId: uploadPart
+      parameters:
+        - { $ref: "#/components/parameters/CSRF" }
+        - {
+            in: header,
+            name: X-Content-SHA256,
+            required: true,
+            schema: { type: string, pattern: "^[a-f0-9]{64}$" },
+          }
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            {
+              schema:
+                {
+                  type: string,
+                  format: binary,
+                  description: Exact part size; final part may be smaller,
+                },
+            }
+      responses:
+        "200": { description: Identical retries accepted }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /uploads/{id}/complete:
+    parameters:
+      [
+        {
+          in: path,
+          name: id,
+          required: true,
+          schema: { type: string, format: uuid },
+        },
+      ]
+    post:
+      operationId: completeUpload
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "202":
+          description: Validated bytes committed with PostgreSQL durable job; completion is idempotent
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/Asset" } }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /storage/health:
+    get:
+      operationId: storageHealth
+      responses:
+        "200":
+          {
+            description: Administrator-only dependency checks,
+            content:
+              {
+                application/json:
+                  {
+                    schema:
+                      {
+                        type: object,
+                        required: [items],
+                        properties:
+                          {
+                            items:
+                              {
+                                type: array,
+                                items: { $ref: "#/components/schemas/Health" },
+                              },
+                          },
+                      },
+                  },
+              },
+          }
+        "403": { $ref: "#/components/responses/Error" }
+  /settings:
+    get:
+      operationId: settings
+      responses:
+        "200":
+          {
+            description: Effective non-secret settings and feature availability,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/Settings" } },
+              },
+          }
+components:
+  securitySchemes:
+    session:
+      {
+        type: apiKey,
+        in: cookie,
+        name: __Host-ah_session,
+        description: Development cookie is ah_session; mutations also require Origin and X-CSRF-Token.,
+      }
+    projectKey:
+      {
+        type: http,
+        scheme: bearer,
+        description: Single-project scoped application key; no identity/project administration.,
+      }
+  parameters:
+    CSRF:
+      {
+        in: header,
+        name: X-CSRF-Token,
+        description: Required for session-authenticated mutations; Origin must match PUBLIC_ORIGIN.,
+        schema: { type: string },
+      }
+    ID:
+      {
+        in: path,
+        name: id,
+        required: true,
+        schema: { type: string, format: uuid },
+      }
+    ProjectID:
+      {
+        in: query,
+        name: project_id,
+        required: true,
+        schema: { type: string, format: uuid },
+      }
+    Limit:
+      {
+        in: query,
+        name: limit,
+        schema: { type: integer, minimum: 1, maximum: 100, default: 50 },
+      }
+    Offset:
+      {
+        in: query,
+        name: offset,
+        schema: { type: integer, minimum: 0, maximum: 100000, default: 0 },
+      }
+  requestBodies:
+    Project:
+      required: true
+      content:
+        application/json:
+          schema:
+            {
+              type: object,
+              additionalProperties: false,
+              required: [name, description, quota_bytes],
+              properties:
+                {
+                  name: { type: string, minLength: 1, maxLength: 180 },
+                  description: { type: string, maxLength: 2000 },
+                  quota_bytes: { type: integer, minimum: 1048576 },
+                },
+            }
+  responses:
+    Error:
+      description: Structured error
+      content:
+        application/json:
+          schema:
+            {
+              type: object,
+              required: [error],
+              properties:
+                {
+                  error:
+                    {
+                      type: object,
+                      required: [code, message],
+                      properties:
+                        {
+                          code: { type: string },
+                          message: { type: string },
+                          request_id: { type: string },
+                        },
+                    },
+                },
+            }
+  schemas:
+    User:
+      type: object
+      required: [id, email, name, role]
+      properties:
+        {
+          id: { type: string },
+          email: { type: string },
+          name: { type: string },
+          role: { type: string, enum: [admin, member] },
+        }
+    Auth:
+      type: object
+      required: [user, csrf_token]
+      properties:
+        {
+          user: { $ref: "#/components/schemas/User" },
+          csrf_token: { type: string },
+        }
+    Project:
+      type: object
+      required:
+        [
+          id,
+          name,
+          description,
+          role,
+          quota_bytes,
+          used_bytes,
+          files,
+          created_at,
+        ]
+      properties:
+        {
+          id: { type: string },
+          name: { type: string },
+          description: { type: string },
+          role: { type: string, enum: [manager, editor, viewer, application] },
+          quota_bytes: { type: integer },
+          used_bytes: { type: integer },
+          files: { type: integer },
+          created_at: { type: string, format: date-time },
+        }
+    Asset:
+      type: object
+      required:
+        [
+          id,
+          project_id,
+          name,
+          mime,
+          size_bytes,
+          sha256,
+          status,
+          visibility,
+          created_at,
+        ]
+      properties:
+        {
+          id: { type: string },
+          project_id: { type: string },
+          name: { type: string },
+          mime: { type: string },
+          size_bytes: { type: integer },
+          sha256: { type: string },
+          status: { type: string },
+          visibility: { type: string },
+          created_at: { type: string, format: date-time },
+        }
+    Upload:
+      type: object
+      required:
+        [
+          id,
+          project_id,
+          name,
+          size_bytes,
+          status,
+          asset_id,
+          part_bytes,
+          parts,
+          expires_at,
+          created_at,
+          asset_status,
+          error_code,
+          uploaded_chunks,
+        ]
+      properties:
+        id: { type: string }
+        project_id: { type: string }
+        name: { type: string }
+        size_bytes: { type: integer }
+        status: { type: string }
+        asset_id: { type: string }
+        asset_status: { type: string }
+        error_code: { type: string }
+        uploaded_chunks: { type: integer }
+        part_bytes: { type: integer }
+        expires_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        parts:
+          type: array
+          items:
+            type: object
+            required: [index, size_bytes, sha256]
+            properties:
+              index: { type: integer }
+              size_bytes: { type: integer }
+              sha256: { type: string }
+    ApiKey:
+      type: object
+      required:
+        [
+          id,
+          project_id,
+          name,
+          prefix,
+          scopes,
+          expires_at,
+          revoked_at,
+          created_at,
+        ]
+      properties:
+        {
+          id: { type: string },
+          project_id: { type: string },
+          name: { type: string },
+          prefix: { type: string },
+          scopes: { type: array, items: { type: string } },
+          expires_at: { type: [string, "null"], format: date-time },
+          revoked_at: { type: [string, "null"], format: date-time },
+          created_at: { type: string, format: date-time },
+        }
+    Member:
+      type: object
+      required: [user_id, email, name, role]
+      properties:
+        {
+          user_id: { type: string },
+          email: { type: string },
+          name: { type: string },
+          role: { type: string },
+        }
+    Activity:
+      type: object
+      required: [id, actor, action, project_id, object_id, detail, created_at]
+      properties:
+        {
+          id: { type: string },
+          actor: { type: string },
+          action: { type: string },
+          project_id: { type: string },
+          object_id: { type: string },
+          detail: { type: string },
+          created_at: { type: string, format: date-time },
+        }
+    Overview:
+      type: object
+      required: [files, bytes, projects, queued, failed, recent, activity]
+      properties:
+        files: { type: integer }
+        bytes: { type: integer }
+        projects: { type: integer }
+        queued: { type: integer }
+        failed: { type: integer }
+        recent: { type: array, items: { $ref: "#/components/schemas/Asset" } }
+        activity:
+          {
+            type: array,
+            items:
+              {
+                type: object,
+                required: [day, count],
+                properties: { day: { type: string }, count: { type: integer } },
+              },
+          }
+    Health:
+      type: object
+      required: [component, status, detail]
+      properties:
+        {
+          component: { type: string },
+          status: { type: string },
+          detail: { type: string },
+        }
+    Settings:
+      type: object
+      required:
+        [
+          name,
+          version,
+          phase,
+          features,
+          storage_provider,
+          asset_limit_bytes,
+          upload_part_bytes,
+          storage_chunk_bytes,
+          backup_retention_days,
+          signed_url_seconds,
+          encryption,
+          editable,
+        ]
+      properties:
+        name: { type: string }
+        version: { type: string }
+        phase: { type: string }
+        features:
+          {
+            type: object,
+            required: [uploads, content, projects, api_keys, invitations],
+            properties:
+              {
+                uploads: { type: boolean },
+                content: { type: boolean },
+                projects: { type: boolean },
+                api_keys: { type: boolean },
+                invitations: { type: boolean },
+              },
+          }
+        storage_provider: { type: string }
+        asset_limit_bytes: { type: integer }
+        upload_part_bytes: { type: integer }
+        storage_chunk_bytes: { type: integer }
+        backup_retention_days: { type: integer }
+        signed_url_seconds: { type: integer }
+        encryption: { type: string }
+        editable: { type: boolean }
