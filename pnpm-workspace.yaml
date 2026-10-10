@@ -1,0 +1,15 @@
+packages:
+  - apps/web
+  - packages/api-client
+
+strictPeerDependencies: true
+
+# Native dependency setup needed by Next.js and Tailwind.
+allowBuilds:
+  "@tailwindcss/oxide": true
+  sharp: true
+  # Native TypeScript import resolution used by ESLint.
+  unrs-resolver: true
+
+minimumReleaseAgeExclude:
+  - "@types/node@26.6.5"

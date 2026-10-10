@@ -1,4 +1,50 @@
 import { test, expect } from "@playwright/test";
+test("invitation token is removed from the URL and creates a persistent account", async ({
+  page,
+}) => {
+  const email = `invited-${Date.now()}@example.test`;
+  const password = "local-invitation-test-password";
+  const login = await page.request.post("/v1/auth/login", {
+    headers: { Origin: "http://127.0.0.1:18080" },
+    data: {
+      email: "browser@example.test",
+      password: "local-browser-test-password",
+    },
+  });
+  expect(login.ok()).toBe(true);
+  const { csrf_token } = await login.json();
+  const invitation = await page.request.post("/v1/invitations", {
+    headers: { "X-CSRF-Token": csrf_token, Origin: "http://127.0.0.1:18080" },
+    data: { email, role: "member" },
+  });
+  expect(invitation.status()).toBe(201);
+  const { url } = await invitation.json();
+  await page.context().clearCookies();
+  await page.goto(url);
+  await expect(
+    page.getByRole("button", { name: "Create account", exact: true }),
+  ).toBeEnabled();
+  await expect(page).toHaveURL(/\/invite\/$/);
+  await page.getByLabel("Display name").fill("Invited browser member");
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page
+    .getByRole("button", { name: "Create account", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "You’re all set" }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "Go to sign in" }).click();
+  await page.getByLabel("Email address").fill(email);
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Workspace overview" }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Workspace overview" }),
+  ).toBeVisible();
+});
 test("persistent dashboard, projects, keys and audit work", async ({
   page,
 }) => {

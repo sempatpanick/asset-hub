@@ -1,7 +1,8 @@
 node_modules/
-package-lock.json
+pnpm-lock.yaml
 packages/api-client/src/schema.d.ts
 .local/
 apps/web/.next/
+apps/web/next-env.d.ts
 apps/web/out/
 services/backend/

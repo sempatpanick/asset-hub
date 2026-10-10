@@ -1,0 +1,12 @@
+# Pull verified images in production; no source build occurs on the Orange Pi.
+services:
+  migrate:
+    build: !reset null
+    image: ${BACKEND_IMAGE:?Set the verified backend image digest}
+  api:
+    image: ${BACKEND_IMAGE:?Set the verified backend image digest}
+  worker:
+    image: ${BACKEND_IMAGE:?Set the verified backend image digest}
+  web:
+    build: !reset null
+    image: ${WEB_IMAGE:?Set the verified web image digest}

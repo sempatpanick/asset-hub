@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import Image from "next/image";
 import {
   Copy,
   Download,
@@ -63,7 +64,14 @@ export function AssetDetails({
       {asset.status === "ready" && (
         <div className="details-preview">
           {safeImage(asset.mime) ? (
-            <img src={content} alt={asset.name} />
+            <Image
+              src={content}
+              alt={asset.name}
+              width={640}
+              height={280}
+              unoptimized
+              style={{ width: "100%", height: "auto" }}
+            />
           ) : safeVideo(asset.mime) ? (
             <video src={content} controls preload="metadata" />
           ) : (

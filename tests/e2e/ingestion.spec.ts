@@ -6,6 +6,14 @@ test("multi-file upload persists through chunk verification and reload", async (
   const project = `Upload browser ${Date.now()}`;
   const files = [
     {
+      name: `preview-${Date.now()}.png`,
+      mimeType: "image/png",
+      buffer: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWQAAAABJRU5ErkJggg==",
+        "base64",
+      ),
+    },
+    {
       name: `large-${Date.now()}.bin`,
       mimeType: "application/octet-stream",
       buffer: Buffer.alloc(8 * 1024 * 1024 + 301, 37),
@@ -70,7 +78,23 @@ test("multi-file upload persists through chunk verification and reload", async (
   await page.getByRole("link", { name: "File Manager", exact: true }).click();
   for (const file of files)
     await expect(page.getByText(file.name, { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Grid view", exact: true }).click();
+  const preview = page.getByRole("img", { name: files[0].name, exact: true });
+  await expect(preview).toBeVisible();
+  await expect
+    .poll(() =>
+      preview.evaluate((image: HTMLImageElement) => image.naturalWidth),
+    )
+    .toBeGreaterThan(0);
   await page.getByRole("button", { name: files[0].name, exact: true }).click();
+  const detailsPreview = page
+    .getByRole("dialog")
+    .getByRole("img", { name: files[0].name, exact: true });
+  await expect
+    .poll(() =>
+      detailsPreview.evaluate((image: HTMLImageElement) => image.naturalWidth),
+    )
+    .toBeGreaterThan(0);
   await page.getByRole("button", { name: "Create 15-minute link" }).click();
   const signed = await page
     .getByLabel("Signed URL", { exact: true })

@@ -1,0 +1,180 @@
+name: CI
+
+on:
+  pull_request:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: services/backend
+    services:
+      postgres:
+        image: postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+        env:
+          POSTGRES_USER: assethub
+          POSTGRES_PASSWORD: ci-disposable-password
+          POSTGRES_DB: postgres
+        ports: ["55433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U assethub"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:8.10.2-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
+        ports: ["56380:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://assethub:ci-disposable-password@127.0.0.1:55433/postgres?sslmode=disable
+      TEST_REDIS_URL: redis://127.0.0.1:56380/11
+      TEST_POSTGRES_IMAGE: postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: services/backend/go.mod
+          cache-dependency-path: services/backend/go.sum
+      - name: Verify Go formatting
+        run: |
+          set -euo pipefail
+          task_unformatted=$(gofmt -l .)
+          if [ -n "$task_unformatted" ]; then
+            printf '%s\n' "$task_unformatted" >&2
+            exit 1
+          fi
+      - name: Compile and type check
+        run: go build ./...
+      - name: Lint and static analysis
+        run: go vet ./...
+      - name: Prepare exact-version snapshot clients
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/pg-bin"
+          chmod +x ../../scripts/ci/pg-client.sh
+          ln -s "$GITHUB_WORKSPACE/scripts/ci/pg-client.sh" "$RUNNER_TEMP/pg-bin/pg_dump"
+          ln -s "$GITHUB_WORKSPACE/scripts/ci/pg-client.sh" "$RUNNER_TEMP/pg-bin/pg_restore"
+          echo "TEST_PG_DUMP_BINARY=$RUNNER_TEMP/pg-bin/pg_dump" >> "$GITHUB_ENV"
+          echo "TEST_PG_RESTORE_BINARY=$RUNNER_TEMP/pg-bin/pg_restore" >> "$GITHUB_ENV"
+      - name: Unit, architecture and persistent integration tests
+        run: |
+          set -euo pipefail
+          mkdir -p ../../.local
+          go test -race -count=1 -v ./... | tee ../../.local/backend-tests.txt
+      - name: Cross-compile Linux ARM64 binaries
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: arm64
+        run: |
+          go build -trimpath -o ../../.local/api-arm64 ./cmd/api
+          go build -trimpath -o ../../.local/admin-arm64 ./cmd/admin
+          go build -trimpath -o ../../.local/worker-arm64 ./cmd/worker
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: backend-test-evidence
+          path: .local/backend-tests.txt
+          retention-days: 7
+
+  frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+        env:
+          POSTGRES_USER: assethub
+          POSTGRES_PASSWORD: ci-disposable-password
+        ports: ["55433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U assethub"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:8.10.2-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
+        ports: ["56380:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://assethub:ci-disposable-password@127.0.0.1:55433/postgres?sslmode=disable
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26.11.1"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: services/backend/go.mod
+          cache-dependency-path: services/backend/go.sum
+      - run: pnpm install --frozen-lockfile
+      - name: Check generated contract is current
+        run: |
+          pnpm run generate:api
+          git diff --exit-code -- packages/api-client/src/schema.d.ts
+      - run: pnpm run format:check
+      - run: pnpm run typecheck
+      - run: pnpm run lint
+      - run: pnpm run test:deploy
+      - run: pnpm run build
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Browser workflows against persistent APIs
+        run: bash scripts/ci/browser-test.sh
+      - name: Gate production dependency audit
+        run: pnpm audit --prod --audit-level=high
+      - name: Report full tooling audit (unpatched braces advisory)
+        continue-on-error: true
+        run: pnpm audit --audit-level=high
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: frontend-test-evidence
+          path: |
+            test-results/
+            .local/screenshots/
+            .local/browser-fixture.log
+          retention-days: 7
+
+  infrastructure:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: services/backend/go.mod
+          cache-dependency-path: services/backend/go.sum
+      - name: Workflow validation
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+      - name: Shell formatting
+        run: go run mvdan.cc/sh/v3/cmd/shfmt@v3.14.1 -d -i 2 -sr deploy/image-tags.sh deploy/compose-release.sh scripts/ci/*.sh
+      - name: Shell lint
+        run: docker run --rm -v "$PWD:/mnt:ro" -w /mnt koalaman/shellcheck:v0.11.0 deploy/image-tags.sh deploy/compose-release.sh scripts/ci/*.sh
+      - name: Validate source and image-only Compose
+        env:
+          PUBLIC_ORIGIN: https://assets.example.test
+          POSTGRES_PASSWORD: ci-disposable-owner-password
+          APP_DATABASE_PASSWORD: ci-disposable-runtime-password
+          REDIS_PASSWORD: ci-disposable-redis-password
+          BACKEND_IMAGE: ghcr.io/sempatpanick/asset-hub/backend@sha256:1111111111111111111111111111111111111111111111111111111111111111
+          WEB_IMAGE: ghcr.io/sempatpanick/asset-hub/web@sha256:2222222222222222222222222222222222222222222222222222222222222222
+        run: |
+          docker compose config --quiet
+          docker compose -f deploy/compose.yaml -f deploy/compose.production.yaml config --quiet

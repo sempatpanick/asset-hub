@@ -1,27 +1,44 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
+import { useRouter } from "next/navigation";
 import { Layers3, ArrowRight, LockKeyhole, ShieldCheck } from "lucide-react";
 import { mutate, setCsrf } from "@/infrastructure/api/client";
 import { useAction } from "@/features/hooks";
 import { ErrorNotice } from "./ui";
+function createInvitationStore(enabled: boolean) {
+  let token = "";
+  return {
+    subscribe: (notify: () => void) => {
+      if (enabled) {
+        const value = new URLSearchParams(window.location.hash.slice(1)).get(
+          "token",
+        );
+        if (value) {
+          token = value;
+          // Keep the secret in component memory after removing it from the URL.
+          window.history.replaceState(null, "", window.location.pathname);
+          notify();
+        }
+      }
+      return () => {};
+    },
+    getSnapshot: () => token,
+    getServerSnapshot: () => "",
+  };
+}
 export default function Auth({ invite = false }: { invite?: boolean }) {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
-  const [token, setToken] = useState("");
+  const invitation = useMemo(() => createInvitationStore(invite), [invite]);
+  const token = useSyncExternalStore(
+    invitation.subscribe,
+    invitation.getSnapshot,
+    invitation.getServerSnapshot,
+  );
   const [accepted, setAccepted] = useState(false);
   const action = useAction();
-  useEffect(() => {
-    if (invite) {
-      const value = new URLSearchParams(window.location.hash.slice(1)).get(
-        "token",
-      );
-      if (value) {
-        setToken(value);
-        window.history.replaceState(null, "", window.location.pathname);
-      }
-    }
-  }, [invite]);
   return (
     <div className="auth-page">
       <div className="auth-brand">
@@ -99,7 +116,7 @@ export default function Auth({ invite = false }: { invite?: boolean }) {
                       { email, password },
                     );
                     setCsrf(result.csrf_token);
-                    window.location.assign("/");
+                    router.replace("/");
                   }
                 });
               }}

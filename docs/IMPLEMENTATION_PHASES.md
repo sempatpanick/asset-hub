@@ -36,4 +36,4 @@ Every report records completed behavior, exact checks/results, limitations, rema
 
 ## Dependency policy
 
-Resolve latest stable direct packages from npm/Go module registries at implementation time. Pin package versions, go.sum and npm lockfiles. Resolve official container stable releases, verify linux/arm64 manifests and pin digests. Record verification date, exceptions and vulnerability review. Avoid prereleases. Upcoming security patches must be reviewed again before public deployment.
+Resolve latest stable direct packages from npm/Go module registries at implementation time. Pin package versions, go.sum, the pnpm package manager and pnpm-lock.yaml. Resolve official container stable releases, verify linux/arm64 manifests and pin digests. Record verification date, exceptions and vulnerability review. Avoid prereleases. Upcoming security patches must be reviewed again before public deployment.

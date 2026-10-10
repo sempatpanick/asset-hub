@@ -13,4 +13,4 @@ if(Test-Path -LiteralPath (Join-Path $taskPgBin 'pg_dump.exe')){
   $env:TEST_PG_RESTORE_BINARY=Join-Path $taskPgBin 'pg_restore.exe'
 }
 Push-Location (Join-Path $taskRoot 'services/backend')
-try { go test ./integration ./cmd/admin -v; if($LASTEXITCODE -ne 0){throw 'Integration tests failed'} } finally { Pop-Location; Remove-Item Env:TEST_DATABASE_URL; Remove-Item Env:TEST_REDIS_URL; Remove-Item Env:TEST_PG_DUMP_BINARY,Env:TEST_PG_RESTORE_BINARY -ErrorAction SilentlyContinue }
+try { go test ./integration ./cmd/admin -count=1 -v; if($LASTEXITCODE -ne 0){throw 'Integration tests failed'} } finally { Pop-Location; Remove-Item Env:TEST_DATABASE_URL; Remove-Item Env:TEST_REDIS_URL; Remove-Item Env:TEST_PG_DUMP_BINARY,Env:TEST_PG_RESTORE_BINARY -ErrorAction SilentlyContinue }

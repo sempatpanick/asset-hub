@@ -1,11 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
 import {
-  ArrowDownToLine,
   ArrowRight,
   Check,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CloudUpload,
@@ -22,10 +22,8 @@ import {
   Layers3,
   LayoutDashboard,
   List,
-  LoaderCircle,
   LogOut,
   Menu,
-  MoreHorizontal,
   Plus,
   Search,
   Settings2,
@@ -34,7 +32,6 @@ import {
   Video,
   Activity as ActivityIcon,
   X,
-  ExternalLink,
 } from "lucide-react";
 import type {
   Activity,
@@ -126,10 +123,11 @@ async function copy(value: string) {
 }
 
 export default function Dashboard({ section }: { section: Section }) {
+  const router = useRouter();
   const [user, setUser] = useState<User>();
   const [authError, setAuthError] = useState("");
   const [mobile, setMobile] = useState(false);
-  const [project, setProject] = useState("");
+  const [selectedProject, setProject] = useState("");
   const [modal, setModal] = useState<
     "project" | "key" | "invite" | "upload" | null
   >(null);
@@ -153,13 +151,18 @@ export default function Dashboard({ section }: { section: Section }) {
       })
       .catch((e) => {
         if (!controller.signal.aborted) {
-          if (e.status === 401) window.location.assign("/login/");
+          if (e.status === 401) router.replace("/login/");
           else setAuthError(e.message);
         }
       });
     return () => controller.abort();
-  }, []);
+  }, [router]);
   const projects = useResource<Items<Project>>(user ? "/projects" : null);
+  const allProjects = projects.data?.items ?? [];
+  const managedProjects = allProjects.filter((p) => p.role === "manager");
+  const project =
+    selectedProject ||
+    (section === "api-keys" ? (managedProjects[0]?.id ?? "") : "");
   const settings = useResource<Settings>(user ? "/settings" : null);
   const overview = useResource<Overview>(
     user && section === "overview" ? "/overview" : null,
@@ -180,12 +183,6 @@ export default function Dashboard({ section }: { section: Section }) {
       ? `/api-keys?project_id=${project}`
       : null,
   );
-  const allProjects = projects.data?.items ?? [];
-  const managedProjects = allProjects.filter((p) => p.role === "manager");
-  useEffect(() => {
-    if (section === "api-keys" && !project && managedProjects.length)
-      setProject(managedProjects[0].id);
-  }, [section, project, managedProjects]);
   const refresh = () => {
     projects.refresh();
     overview.refresh();
@@ -331,7 +328,7 @@ export default function Dashboard({ section }: { section: Section }) {
                 onClick={() =>
                   void action.run(async () => {
                     await mutate("/auth/logout");
-                    window.location.assign("/login/");
+                    router.replace("/login/");
                   })
                 }
               >
@@ -1288,7 +1285,13 @@ function AssetList({
           <article className="asset-tile" key={a.id}>
             <div className="asset-preview">
               {a.status === "ready" && safeImage(a.mime) ? (
-                <img src={assetContent(a.id)} alt={a.name} loading="lazy" />
+                <Image
+                  src={assetContent(a.id)}
+                  alt={a.name}
+                  fill
+                  unoptimized
+                  sizes="(max-width: 720px) 50vw, 240px"
+                />
               ) : (
                 <FileIcon mime={a.mime} />
               )}

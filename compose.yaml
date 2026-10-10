@@ -1,0 +1,5 @@
+# Root entry point for the standard `docker compose up` command.
+# Keep the deployment model and relative build paths in deploy/compose.yaml.
+name: assethub
+include:
+  - path: ./deploy/compose.yaml

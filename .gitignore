@@ -1,4 +1,5 @@
 node_modules/
+.pnpm-store/
 .next/
 out/
 coverage/
@@ -13,3 +14,6 @@ playwright-report/
 *.log
 *.tsbuildinfo
 *.pid
+deploy/images.env
+deploy/current-release
+deploy/releases/

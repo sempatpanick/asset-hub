@@ -2,19 +2,24 @@
   "name": "assethub",
   "version": "0.3.0",
   "private": true,
-  "workspaces": [
-    "apps/web",
-    "packages/api-client"
-  ],
+  "packageManager": "pnpm@12.10.1",
   "scripts": {
-    "dev": "npm run dev --workspace apps/web",
-    "build": "npm run build --workspace apps/web",
-    "typecheck": "npm run typecheck --workspace apps/web",
+    "dev": "pnpm --filter @assethub/web run dev",
+    "build": "pnpm --filter @assethub/web run build",
+    "typecheck": "pnpm --filter @assethub/web run typecheck && tsc --project tsconfig.tooling.json",
+    "format": "prettier --write \"apps/web/**/*.{ts,tsx,js,mjs,json,css}\" \"packages/api-client/**/*.{ts,json}\" \"tests/e2e/**/*.ts\" package.json eslint.config.mjs pnpm-workspace.yaml playwright.config.ts tsconfig.tooling.json \"tests/deploy/**/*.mjs\" \".github/workflows/*.yml\" deploy/compose.production.yaml",
+    "format:check": "prettier --check \"apps/web/**/*.{ts,tsx,js,mjs,json,css}\" \"packages/api-client/**/*.{ts,json}\" \"tests/e2e/**/*.ts\" package.json eslint.config.mjs pnpm-workspace.yaml playwright.config.ts tsconfig.tooling.json \"tests/deploy/**/*.mjs\" \".github/workflows/*.yml\" deploy/compose.production.yaml",
+    "lint": "eslint apps/web packages/api-client/src/index.ts tests/e2e playwright.config.ts eslint.config.mjs --max-warnings 0 tests/deploy",
+    "test": "pnpm run test:e2e",
     "test:e2e": "playwright test",
-    "generate:api": "openapi-typescript api/openapi.yaml -o packages/api-client/src/schema.d.ts"
+    "generate:api": "openapi-typescript api/openapi.yaml -o packages/api-client/src/schema.d.ts",
+    "test:deploy": "node --test tests/deploy/*.test.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.64.0",
+    "@types/node": "26.6.5",
+    "eslint": "9.39.5",
+    "eslint-config-next": "16.4.0",
     "openapi-typescript": "7.13.0",
     "prettier": "3.9.9",
     "typescript": "5.9.3"

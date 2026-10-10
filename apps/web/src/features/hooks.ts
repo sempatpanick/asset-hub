@@ -1,36 +1,44 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ApiError, request } from "@/infrastructure/api/client";
 export function useResource<T>(path: string | null) {
-  const [data, setData] = useState<T>();
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+  const [snapshot, setSnapshot] = useState<{
+    path: string | null;
+    revision: number;
+    data?: T;
+    error: string;
+  }>({ path: null, revision: 0, error: "" });
   const [revision, setRevision] = useState(0);
   const refresh = useCallback(() => setRevision((v) => v + 1), []);
   useEffect(() => {
-    if (!path) {
-      setLoading(false);
-      setData(undefined);
-      return;
-    }
+    if (!path) return;
     const controller = new AbortController();
-    setLoading(true);
-    setError("");
-    setData(undefined);
     request<T>(path, { signal: controller.signal })
-      .then(setData)
+      .then((data) => {
+        if (!controller.signal.aborted)
+          setSnapshot({ path, revision, data, error: "" });
+      })
       .catch((e) => {
         if (controller.signal.aborted) return;
         if (e instanceof ApiError && e.status === 401)
-          window.location.assign("/login/");
-        else setError(e.message ?? "Unable to load data");
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
+          router.replace("/login/");
+        setSnapshot({
+          path,
+          revision,
+          error: e.message ?? "Unable to load data",
+        });
       });
     return () => controller.abort();
-  }, [path, revision]);
-  return { data, error, loading, refresh };
+  }, [path, revision, router]);
+  const current = snapshot.path === path && snapshot.revision === revision;
+  return {
+    data: path && current ? snapshot.data : undefined,
+    error: path && current ? snapshot.error : "",
+    loading: !!path && !current,
+    refresh,
+  };
 }
 export function useAction() {
   const [busy, setBusy] = useState(false);
