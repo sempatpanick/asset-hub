@@ -427,7 +427,7 @@ paths:
       responses:
         "202":
           {
-            description: Content revoked; asynchronous best-effort remote deletion; 30-day backup retention,
+            description: Content revoked; asynchronous best-effort remote deletion; 30-day backup retention when backups are enabled,
           }
   /assets/{id}/restore:
     parameters:
@@ -445,7 +445,7 @@ paths:
       responses:
         "200":
           {
-            description: Administrator verified retained backup; quota reserved and new content version restored,
+            description: Administrator verified retained backup when backups are enabled; quota reserved and new content version restored,
           }
         "403": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -1073,7 +1073,8 @@ components:
         features:
           {
             type: object,
-            required: [uploads, content, projects, api_keys, invitations],
+            required:
+              [uploads, content, projects, api_keys, invitations, backups],
             properties:
               {
                 uploads: { type: boolean },
@@ -1081,6 +1082,11 @@ components:
                 projects: { type: boolean },
                 api_keys: { type: boolean },
                 invitations: { type: boolean },
+                backups:
+                  {
+                    type: boolean,
+                    description: Independent encrypted backup is enabled,
+                  },
               },
           }
         storage_provider: { type: string }

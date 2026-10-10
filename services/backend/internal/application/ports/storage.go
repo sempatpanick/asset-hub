@@ -41,6 +41,12 @@ type Staging interface {
 	Remove(string) error
 }
 type FileInspector interface{ MIME([]byte) string }
+
+// UploadCheckpoints retain ciphertext during unfinished uploads, not for recovery.
+type UploadCheckpoints interface {
+	PutCheckpoint(string, domain.Chunk, []byte) error
+	OpenCheckpoint(string, domain.Chunk) ([]byte, error)
+}
 type Cryptography interface {
 	NewKey(string) ([]byte, []byte, error)
 	UnwrapKey(string, []byte) ([]byte, error)

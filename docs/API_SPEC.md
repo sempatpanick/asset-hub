@@ -4,24 +4,24 @@ Base path `/v1`. Same-origin browser sessions use secure HttpOnly cookies. Appli
 
 ## Required endpoint roadmap
 
-All routes below are implemented. Uploads require configured storage, a wrapping key and the required backup. Signing additionally requires SIGNED_URL_KEY. The OpenAPI contract describes the shipped identity, ingestion, content and management endpoints; unavailable configuration returns a real error rather than simulated success.
+All routes below are implemented. Uploads require configured storage and a wrapping key. Independent backup is required by default; BACKUP_ENABLED=false explicitly disables that requirement, download fallback and restore. Signing additionally requires SIGNED_URL_KEY. The OpenAPI contract describes the shipped identity, ingestion, content and management endpoints; unavailable configuration returns a real error rather than simulated success.
 
-| Method/path | Behavior |
-|---|---|
-| POST /v1/assets | Small multipart upload (8 MiB maximum); project_id and file; returns 202 queued asset |
-| GET /v1/assets | Authorized project assets; name/MIME-prefix/status/project filters; administrator-only deleted filter |
-| GET /v1/assets/{id} | Safe metadata only |
-| PATCH /v1/assets/{id} | Rename; manager-controlled public/private visibility |
-| DELETE /v1/assets/{id} | Immediate tombstone/access revocation; async physical cleanup |
-| GET, HEAD /v1/assets/{id}/content | Authorized/public/signed full or single-range content |
-| POST /v1/assets/{id}/signed-url | Ready asset capability; default 900 seconds; maximum 24 hours |
-| POST /v1/assets/{id}/retry | Requeue failed asset |
-| POST /v1/assets/{id}/restore | Installation administrator restores retained backup |
-| GET, POST /v1/projects | List authorized projects; create project and manager membership |
-| PATCH /v1/projects/{id} | Project manager updates name/description/quota |
-| GET, POST /v1/api-keys | Authorized key metadata; create single-project scoped secret shown once |
-| DELETE /v1/api-keys/{id} | Revoke key immediately |
-| GET /v1/storage/health | Authorized, sanitized provider/backup health |
+| Method/path                       | Behavior                                                                                              |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| POST /v1/assets                   | Small multipart upload (8 MiB maximum); project_id and file; returns 202 queued asset                 |
+| GET /v1/assets                    | Authorized project assets; name/MIME-prefix/status/project filters; administrator-only deleted filter |
+| GET /v1/assets/{id}               | Safe metadata only                                                                                    |
+| PATCH /v1/assets/{id}             | Rename; manager-controlled public/private visibility                                                  |
+| DELETE /v1/assets/{id}            | Immediate tombstone/access revocation; async physical cleanup                                         |
+| GET, HEAD /v1/assets/{id}/content | Authorized/public/signed full or single-range content                                                 |
+| POST /v1/assets/{id}/signed-url   | Ready asset capability; default 900 seconds; maximum 24 hours                                         |
+| POST /v1/assets/{id}/retry        | Requeue failed asset                                                                                  |
+| POST /v1/assets/{id}/restore      | Installation administrator restores retained backup                                                   |
+| GET, POST /v1/projects            | List authorized projects; create project and manager membership                                       |
+| PATCH /v1/projects/{id}           | Project manager updates name/description/quota                                                        |
+| GET, POST /v1/api-keys            | Authorized key metadata; create single-project scoped secret shown once                               |
+| DELETE /v1/api-keys/{id}          | Revoke key immediately                                                                                |
+| GET /v1/storage/health            | Authorized, sanitized provider/backup health                                                          |
 
 ## Browser identity
 
@@ -41,6 +41,6 @@ Ready assets only. HEAD contains content metadata without retrieving file bytes.
 
 ## Health
 
-GET /healthz reports process liveness; GET /readyz checks required metadata/queue dependencies without disclosing configuration. Detailed storage health is protected. Telegram checks actual bot/channel access; absent credentials report unavailable. Protected health also reports worker heartbeat, durable jobs and staging disk availability. Missing backup mount blocks asset readiness.
+GET /healthz reports process liveness; GET /readyz checks required metadata/queue dependencies without disclosing configuration. Detailed storage health is protected. Telegram checks actual bot/channel access; absent credentials report unavailable. Protected health also reports worker heartbeat, durable jobs and staging disk availability. Missing backup mount blocks asset readiness when backups are enabled. With backups explicitly disabled, health reports backup status disabled; GET /v1/settings exposes features.backups=false and backup_retention_days=0. Primary chunk retrieval/integrity verification still gates readiness.
 
 The OpenAPI contract is maintained in `api/openapi.yaml`; effective configuration can disable storage or signed links when their required secrets/providers are absent.

@@ -1,0 +1,15 @@
+# Explicit operator opt-out: retain only upload checkpoints on the staging SSD.
+services:
+  api:
+    environment:
+      BACKUP_ENABLED: "false"
+    volumes: !override
+      - ${DATA_ROOT:-/srv/assethub}/staging:/data/staging
+      - ${DATA_ROOT:-/srv/assethub}/cache:/data/cache
+      - ${DATA_ROOT:-/srv/assethub}/local:/data/local
+  worker:
+    environment:
+      BACKUP_ENABLED: "false"
+    volumes: !override
+      - ${DATA_ROOT:-/srv/assethub}/staging:/data/staging
+      - ${DATA_ROOT:-/srv/assethub}/local:/data/local

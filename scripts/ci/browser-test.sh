@@ -37,4 +37,4 @@ if [[ "$task_ready" != true ]]; then
   echo 'Browser fixture did not become ready.' >&2
   exit 1
 fi
-pnpm test
+pnpm run test:e2e "$@"

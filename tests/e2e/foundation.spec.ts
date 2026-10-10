@@ -108,7 +108,7 @@ test("persistent dashboard, projects, keys and audit work", async ({
   await page.getByRole("link", { name: "Settings", exact: true }).click();
   await expect(
     page.getByText(
-      "Uploads are enabled. Ready assets have verified encrypted primary storage and backup.",
+      "Uploads are enabled. New assets require verified encrypted primary storage and backup.",
     ),
   ).toBeVisible();
   await expect(

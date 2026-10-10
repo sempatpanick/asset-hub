@@ -52,3 +52,34 @@ Restoring a PostgreSQL snapshot can roll back deletions and revocations that occ
 ## Required production release gates
 
 Live Telegram upload/retrieval and rate-limit behavior with the actual bot/channel; independent backup mount disappearance and recovery; native Orange Pi ARM64 execution; sustained upload/download resource measurements; an operator-run database/key/asset restore drill; HTTPS/tunnel and caching validation. Local-provider tests and ARM64 cross-compilation do not satisfy these gates. S3/R2 and direct MTProto transports remain future providers. A custom Bot API gateway can be configured, but local-server absolute file paths need a dedicated transport and are not accepted by the hosted-compatible adapter.
+
+## Temporarily operate without independent backups
+
+Independent encrypted backup remains the default. Setting `BACKUP_ENABLED=false`
+explicitly opts out of retained asset backups, backup download fallback and deleted
+asset restoration. Uploads still require verified encrypted primary storage. Temporary
+encrypted retry checkpoints remain under the staging SSD alongside upload parts and
+are removed by the worker after completion/cancellation cleanup; they are not recovery
+backups. Logical staging reservations are halved in this mode to leave room for both
+plaintext parts and temporary ciphertext. Production disk reserve checks remain active.
+
+For GitHub deployments, set repository **Actions variable** `BACKUP_ENABLED` to
+`false`. The workflow selects `deploy/compose.no-backup.yaml`, omits the backup bind
+mounts and records the active policy in ignored `deploy/backup.env`. It preserves the
+server `.env`. The dashboard reports backups disabled and offers no restore action.
+The storage initializer prepares only staging/cache/local directories with application
+ownership; it never creates a backup marker or claims a same-disk directory is independent.
+
+For source-based manual deployment, set `BACKUP_ENABLED=false` in the protected
+`.env` and include `-f deploy/compose.no-backup.yaml` after the base Compose file.
+After an Actions deployment, use `bash deploy/compose-release.sh` as usual; it loads
+the recorded policy automatically.
+
+To enable backups later, provision and verify the independent mount using
+`scripts/prepare-host.sh`, then set the Actions variable to `true` and deploy again.
+Drain unfinished uploads before changing modes. Enabling backups protects new uploads;
+it does not retroactively create backups for assets uploaded while disabled. Re-upload
+those assets through AssetHub to create verified backups. Existing encrypted backup
+files are not deleted by disabling the feature. PostgreSQL metadata and offline master
+keys remain essential for recovery; without independent copies, primary storage or SSD
+loss can cause permanent data loss. Database snapshots still require a configured destination.

@@ -345,7 +345,7 @@ export function UploadHistory({
           detail={
             enabled
               ? "Upload to a project and follow each file as it becomes ready."
-              : "Configure storage credentials, encryption and an independent backup to enable uploads."
+              : "Configure storage credentials and encryption to enable uploads."
           }
           action={
             enabled ? (

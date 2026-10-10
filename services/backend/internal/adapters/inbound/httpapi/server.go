@@ -506,7 +506,7 @@ func (s *Server) settings(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, domain.ErrForbidden)
 		return
 	}
-	reply(w, 200, map[string]any{"name": "AssetHub", "version": "0.3.0", "phase": "content", "features": map[string]bool{"uploads": s.service.Ingestion().Enabled(), "content": s.service.Ingestion().ContentEnabled(), "projects": true, "api_keys": true, "invitations": current(r).IsAdmin()}, "storage_provider": s.service.Ingestion().ProviderName(), "asset_limit_bytes": 512 << 20, "upload_part_bytes": 8 << 20, "storage_chunk_bytes": 16 << 20, "backup_retention_days": 30, "signed_url_seconds": 900, "encryption": "AES-256-GCM", "editable": false})
+	reply(w, 200, map[string]any{"name": "AssetHub", "version": "0.3.0", "phase": "content", "features": map[string]bool{"uploads": s.service.Ingestion().Enabled(), "content": s.service.Ingestion().ContentEnabled(), "projects": true, "api_keys": true, "invitations": current(r).IsAdmin(), "backups": s.service.Ingestion().BackupEnabled()}, "storage_provider": s.service.Ingestion().ProviderName(), "asset_limit_bytes": 512 << 20, "upload_part_bytes": 8 << 20, "storage_chunk_bytes": 16 << 20, "backup_retention_days": s.service.Ingestion().BackupRetentionDays(), "signed_url_seconds": 900, "encryption": "AES-256-GCM", "editable": false})
 }
 func (s *Server) unavailable(w http.ResponseWriter, r *http.Request) {
 	reply(w, 503, map[string]any{"error": map[string]string{"code": "feature_unavailable", "message": "This feature is unavailable in the current configuration or implementation phase"}})

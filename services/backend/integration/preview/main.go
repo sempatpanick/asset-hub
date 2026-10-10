@@ -10,6 +10,7 @@ import (
 	"assethub/internal/adapters/outbound/runtimehealth"
 	"assethub/internal/adapters/outbound/security"
 	"assethub/internal/adapters/outbound/validation"
+	"assethub/internal/application/ports"
 	"assethub/internal/application/usecases"
 	"assethub/migrations"
 	"context"
@@ -78,11 +79,15 @@ func run() error {
 	reservePercent := uint64(0) // Development fixture on a shared Windows disk; production defaults to a 10% reserve.
 	stage := &filesystem.Staging{ReservePercent: &reservePercent, Root: filepath.Join(fixtureRoot, "staging")}
 	os.MkdirAll(stage.Root, 0700)
-	backup := &filesystem.Backup{Root: filepath.Join(fixtureRoot, "backup"), StagingRoot: stage.Root, ReservePercent: &reservePercent}
-	os.MkdirAll(backup.Root, 0700)
-	os.WriteFile(filepath.Join(backup.Root, ".assethub-backup"), []byte("development fixture"), 0600)
+	var backup ports.Backup
+	backupRoot := filepath.Join(fixtureRoot, "backup")
+	if os.Getenv("BACKUP_ENABLED") != "false" {
+		backup = &filesystem.Backup{Root: backupRoot, StagingRoot: stage.Root, ReservePercent: &reservePercent}
+		os.MkdirAll(backupRoot, 0700)
+		os.WriteFile(filepath.Join(backupRoot, ".assethub-backup"), []byte("development fixture"), 0600)
+	}
 	primary := &filesystem.Local{ReservePercent: &reservePercent, Root: filepath.Join(fixtureRoot, "primary")}
-	health := &runtimehealth.Health{Redis: redisClient, BackupRoot: backup.Root, Provider: primary, Backup: backup}
+	health := &runtimehealth.Health{Redis: redisClient, BackupRoot: backupRoot, Provider: primary, Backup: backup, BackupDisabled: backup == nil}
 	app := usecases.New(repo, sec, security.Clock{}, health)
 	key := make([]byte, 32)
 	if _, err = rand.Read(key); err != nil {

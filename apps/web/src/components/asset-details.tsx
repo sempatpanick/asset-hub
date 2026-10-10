@@ -32,6 +32,7 @@ export function AssetDetails({
   canWrite,
   canManage,
   isAdmin,
+  backupEnabled,
   onClose,
   onSaved,
 }: {
@@ -39,6 +40,7 @@ export function AssetDetails({
   canWrite: boolean;
   canManage: boolean;
   isAdmin: boolean;
+  backupEnabled: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -205,7 +207,10 @@ export function AssetDetails({
           </p>
         </div>
       )}
-      {asset.status === "deleted" && isAdmin ? (
+      {asset.status === "deleted" && !backupEnabled && (
+        <p>Backups are disabled. This deleted asset cannot be restored.</p>
+      )}
+      {asset.status === "deleted" && isAdmin && backupEnabled ? (
         <button
           className="button"
           disabled={action.busy}
@@ -221,13 +226,15 @@ export function AssetDetails({
           Restore retained backup
         </button>
       ) : (
-        canWrite && (
+        canWrite &&
+        asset.status !== "deleted" && (
           <div className="details-delete">
             {confirmDelete ? (
               <>
                 <p>
-                  Delete this asset? Access stops immediately. Administrators
-                  can recover its verified backup for 30 days.
+                  {backupEnabled
+                    ? "Delete this asset? Access stops immediately. Administrators can restore a verified retained backup for 30 days if one exists."
+                    : "Delete this asset? Access stops immediately. Backups are disabled, so this asset cannot be restored."}
                 </p>
                 <button
                   className="button danger"

@@ -28,6 +28,7 @@ type Config struct {
 	CacheCapacity                                                                int64
 	DatabaseURL, RedisURL, Origin, Address, BackupRoot                           string
 	Secure                                                                       bool
+	BackupDisabled                                                               bool
 	StagingRoot, LocalRoot, Provider, BotToken, ChannelID, BotAPIBase, MasterKey string
 	StagingCapacity                                                              int64
 }
@@ -41,6 +42,13 @@ func env(k, def string) string {
 func Read() (Config, error) {
 	c := Config{DatabaseURL: os.Getenv("DATABASE_URL"), RedisURL: env("REDIS_URL", "redis://redis:6379/0"), Origin: env("PUBLIC_ORIGIN", "http://localhost:3005"), Address: env("LISTEN_ADDR", ":8085"), BackupRoot: env("BACKUP_ROOT", "/backup"), Secure: env("APP_ENV", "production") != "development"}
 	u, err := url.Parse(c.Origin)
+	switch env("BACKUP_ENABLED", "true") {
+	case "true":
+	case "false":
+		c.BackupDisabled = true
+	default:
+		return c, fmt.Errorf("BACKUP_ENABLED must be true or false")
+	}
 	if err != nil || u.Host == "" || u.Path != "" || u.RawQuery != "" || u.Fragment != "" || u.User != nil || (u.Scheme != "http" && u.Scheme != "https") || (c.Secure && u.Scheme != "https") {
 		return c, fmt.Errorf("PUBLIC_ORIGIN must be an origin; production requires HTTPS")
 	}
@@ -136,8 +144,11 @@ func Wire(ctx context.Context, c Config) (*usecases.Service, func(), error) {
 			return nil, nil, fmt.Errorf("invalid asset key")
 		}
 	}
-	backup := &filesystem.Backup{Root: c.BackupRoot, StagingRoot: c.StagingRoot, RequireIndependent: c.Secure, ReservePercent: &c.DiskReservePercent}
-	h := &runtimehealth.Health{Redis: client, BackupRoot: c.BackupRoot, Provider: provider, Backup: backup, StagingRoot: c.StagingRoot, CacheRoot: c.CacheRoot}
+	var backup ports.Backup
+	if !c.BackupDisabled {
+		backup = &filesystem.Backup{Root: c.BackupRoot, StagingRoot: c.StagingRoot, RequireIndependent: c.Secure, ReservePercent: &c.DiskReservePercent}
+	}
+	h := &runtimehealth.Health{Redis: client, BackupRoot: c.BackupRoot, Provider: provider, Backup: backup, BackupDisabled: c.BackupDisabled, StagingRoot: c.StagingRoot, CacheRoot: c.CacheRoot}
 	app := usecases.New(repo, security.Security{}, security.Clock{}, h)
 	app.SetIngestion(usecases.NewIngestion(app, repo, &filesystem.Staging{Root: c.StagingRoot, ReservePercent: &c.DiskReservePercent}, crypto, provider, backup, &redisqueue.Queue{Client: client}, c.StagingCapacity, validation.FileInspector{}))
 	var signer ports.ContentSigner

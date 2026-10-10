@@ -262,7 +262,7 @@ func (r *Repository) ReadyAsset(ctx context.Context, id, token string) error {
 		if _, err := tx.Exec(ctx, "DELETE FROM asset_jobs WHERE asset_id=$1", id); err != nil {
 			return err
 		}
-		return audit(ctx, tx, domain.Principal{User: domain.User{Email: "worker"}}, "asset.ready", project, id, "Encrypted primary chunks and independent backup verified")
+		return audit(ctx, tx, domain.Principal{User: domain.User{Email: "worker"}}, "asset.ready", project, id, "Encrypted primary chunks verified")
 	})
 }
 func (r *Repository) FailJob(ctx context.Context, id, token, code string, delay time.Duration, permanent bool) error {

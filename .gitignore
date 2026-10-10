@@ -15,5 +15,6 @@ playwright-report/
 *.tsbuildinfo
 *.pid
 deploy/images.env
+deploy/backup.env
 deploy/current-release
 deploy/releases/

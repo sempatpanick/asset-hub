@@ -536,6 +536,8 @@ export interface components {
                 projects: boolean;
                 api_keys: boolean;
                 invitations: boolean;
+                /** @description Independent encrypted backup is enabled */
+                backups: boolean;
             };
             storage_provider: string;
             asset_limit_bytes: number;
@@ -1044,7 +1046,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Content revoked; asynchronous best-effort remote deletion; 30-day backup retention */
+            /** @description Content revoked; asynchronous best-effort remote deletion; 30-day backup retention when backups are enabled */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -1102,7 +1104,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Administrator verified retained backup; quota reserved and new content version restored */
+            /** @description Administrator verified retained backup when backups are enabled; quota reserved and new content version restored */
             200: {
                 headers: {
                     [name: string]: unknown;

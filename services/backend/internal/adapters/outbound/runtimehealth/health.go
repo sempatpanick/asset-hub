@@ -15,6 +15,7 @@ type Health struct {
 	BackupRoot             string
 	Provider               ports.StorageProvider
 	Backup                 ports.Backup
+	BackupDisabled         bool
 	StagingRoot, CacheRoot string
 }
 
@@ -38,6 +39,10 @@ func (h *Health) Check(ctx context.Context) []domain.Health {
 			b.Status = "healthy"
 			b.Detail = "Backup filesystem checks passed"
 		}
+	}
+	if h.BackupDisabled {
+		b.Status = "disabled"
+		b.Detail = "Backups disabled by operator; primary storage is the only retained copy. Restore and backup fallback are unavailable."
 	}
 	provider := domain.Health{Component: "telegram", Status: "unavailable", Detail: "Configure storage credentials"}
 	if h.Provider != nil {

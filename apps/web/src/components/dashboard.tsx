@@ -400,7 +400,7 @@ export default function Dashboard({ section }: { section: Section }) {
                   title={
                     settings.data?.features.uploads
                       ? "Upload to a project"
-                      : "Configure storage, encryption and backup to enable uploads"
+                      : "Configure storage and encryption to enable uploads"
                   }
                   onClick={() => setModal("upload")}
                 >
@@ -421,6 +421,7 @@ export default function Dashboard({ section }: { section: Section }) {
               ) : (
                 overview.data && (
                   <OverviewView
+                    backupEnabled={settings.data?.features.backups !== false}
                     data={overview.data}
                     health={health.data?.items}
                     onProject={() => setModal("project")}
@@ -622,9 +623,10 @@ export default function Dashboard({ section }: { section: Section }) {
               )}
               <div className="panel-note">
                 <ShieldCheck size={15} />
-                Files become ready after encrypted storage and backup
-                verification. Select a file to preview, download or manage its
-                access.
+                {settings.data?.features.backups === false
+                  ? "Files become ready after encrypted primary storage verification. Backups are disabled."
+                  : "Files become ready after encrypted storage and backup verification."}{" "}
+                Select a file to preview, download or manage its access.
               </div>
             </section>
           )}
@@ -875,12 +877,18 @@ export default function Dashboard({ section }: { section: Section }) {
                   />
                   <SettingsRow
                     label="Deleted backup retention"
-                    value="30 days"
+                    value={
+                      settings.data?.features.backups === false
+                        ? "Disabled"
+                        : `${settings.data?.backup_retention_days ?? 30} days`
+                    }
                   />
                   <div className="panel-note">
-                    {settings.data?.features.uploads
-                      ? "Uploads are enabled. Ready assets have verified encrypted primary storage and backup."
-                      : "Configure Telegram credentials and an encryption key to enable uploads. An independent backup is required."}
+                    {settings.data?.features.backups === false
+                      ? "Backups are disabled. Ready assets rely on primary storage. Deleted assets cannot be restored."
+                      : settings.data?.features.uploads
+                        ? "Uploads are enabled. New assets require verified encrypted primary storage and backup."
+                        : "Configure Telegram credentials and an encryption key to enable uploads. An independent backup is required."}
                   </div>
                 </section>
               </div>
@@ -1019,6 +1027,7 @@ export default function Dashboard({ section }: { section: Section }) {
       {selectedAsset && (
         <AssetDetails
           asset={selectedAsset}
+          backupEnabled={settings.data?.features.backups !== false}
           canWrite={allProjects.some(
             (p) => p.id === selectedAsset.project_id && p.role !== "viewer",
           )}
@@ -1069,10 +1078,12 @@ function Stat({
   );
 }
 function OverviewView({
+  backupEnabled,
   data,
   health,
   onProject,
 }: {
+  backupEnabled: boolean;
   data: Overview;
   health?: Health[];
   onProject: () => void;
@@ -1256,10 +1267,13 @@ function OverviewView({
           <div className="backup-note">
             <ShieldCheck size={20} />
             <div>
-              <strong>Designed for recovery</strong>
+              <strong>
+                {backupEnabled ? "Designed for recovery" : "Backups disabled"}
+              </strong>
               <p>
-                Encrypted backups must be verified before an asset becomes
-                ready.
+                {backupEnabled
+                  ? "New assets require a verified encrypted backup before becoming ready."
+                  : "Primary storage holds the only permanent copy. Deleted assets cannot be restored."}
               </p>
             </div>
           </div>

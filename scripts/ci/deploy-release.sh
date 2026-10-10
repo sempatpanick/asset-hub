@@ -42,11 +42,19 @@ done < "$task_release/images.env"
 }
 task_compose=(docker compose --project-name assethub --env-file .env --env-file "$task_release/images.env"
   -f "$task_release/compose.yaml" -f "$task_release/compose.production.yaml")
+if [[ -n "${DEPLOY_BACKUP_ENABLED:-}" ]]; then
+  case "$DEPLOY_BACKUP_ENABLED" in true | false) export BACKUP_ENABLED="$DEPLOY_BACKUP_ENABLED" ;; *)
+    echo 'BACKUP_ENABLED must be true or false.' >&2
+    exit 1
+    ;;
+  esac
+fi
 "${task_compose[@]}" config --quiet
 task_environment=$("${task_compose[@]}" config --environment)
 task_app_env=$(sed -n 's/^APP_ENV=//p' <<< "$task_environment")
 task_data=$(sed -n 's/^DATA_ROOT=//p' <<< "$task_environment")
 task_backup=$(sed -n 's/^BACKUP_PATH=//p' <<< "$task_environment")
+task_backup_enabled=$(sed -n 's/^BACKUP_ENABLED=//p' <<< "$task_environment")
 task_http_port=$(sed -n 's/^HTTP_PORT=//p' <<< "$task_environment")
 task_api_port=$(sed -n 's/^API_PORT=//p' <<< "$task_environment")
 task_postgres_port=$(sed -n 's/^POSTGRES_PORT=//p' <<< "$task_environment")
@@ -59,24 +67,33 @@ unset task_environment
 task_data=${task_data:-/srv/assethub}
 task_backup=${task_backup:-/mnt/assethub-backup}
 [[ "$task_data" == /* && "$task_data" != / && "$task_backup" == /* && "$task_backup" != / ]] || exit 1
-mountpoint -q -- "$task_backup" || {
-  echo 'Independent backup mount is absent.' >&2
-  exit 1
-}
-[[ -f "$task_backup/.assethub-backup" ]] || {
-  echo 'Backup marker is absent.' >&2
-  exit 1
-}
-for task_directory in staging cache local; do
-  [[ -d "$task_data/$task_directory" ]] || {
-    echo 'Run prepare-host.sh before deploying.' >&2
+case "${task_backup_enabled:-true}" in
+false)
+  task_compose+=(-f "$task_release/compose.no-backup.yaml")
+  echo 'Backups explicitly disabled: uploads use primary storage and temporary SSD checkpoints.'
+  ;;
+true)
+  mountpoint -q -- "$task_backup" || {
+    echo 'Independent backup mount is absent.' >&2
     exit 1
   }
-done
-[[ $(stat -c %d -- "$task_data/staging") != $(stat -c %d -- "$task_backup") ]] || {
-  echo 'Staging and backup must use separate filesystems.' >&2
+  [[ -f "$task_backup/.assethub-backup" ]] || {
+    echo 'Backup marker is absent.' >&2
+    exit 1
+  }
+  task_data_check=$task_data
+  while [[ ! -d "$task_data_check" ]]; do task_data_check=$(dirname -- "$task_data_check"); done
+  [[ $(stat -c %d -- "$task_data_check") != $(stat -c %d -- "$task_backup") ]] || {
+    echo 'Staging and backup must use separate filesystems.' >&2
+    exit 1
+  }
+  ;;
+*)
+  echo 'BACKUP_ENABLED must be true or false.' >&2
   exit 1
-}
+  ;;
+esac
+"${task_compose[@]}" config --quiet
 for task_port in "${task_http_port:-3005}" "${task_api_port:-8085}" "${task_postgres_port:-5435}" "${task_redis_port:-6385}"; do
   [[ "$task_port" =~ ^[0-9]{1,5}$ ]] && ((10#$task_port > 0 && 10#$task_port <= 65535)) || exit 1
   task_containers=$(docker ps --filter "publish=$task_port" --format '{{.Names}}|{{.Label "com.docker.compose.project"}}')
@@ -101,7 +118,8 @@ trap cleanup EXIT
 printf '%s\n' "$task_token" | docker login ghcr.io --username "$GHCR_USER" --password-stdin > /dev/null
 unset task_token
 # Finish all downloads and preflight checks before stopping traffic/workers.
-"${task_compose[@]}" pull postgres redis migrate api worker web
+"${task_compose[@]}" pull storage-init postgres redis migrate api worker web
+"${task_compose[@]}" up --no-build --no-deps --force-recreate --exit-code-from storage-init storage-init
 "${task_compose[@]}" up -d --no-build --wait --wait-timeout 180 postgres redis
 # Quiesce mutation traffic before migrations. A failed migration keeps it stopped.
 "${task_compose[@]}" stop --timeout 45 web api worker
@@ -110,6 +128,9 @@ unset task_token
 # Promote the manifest only after the services are healthy. Previous releases remain.
 install -m 0644 "$task_release/compose.yaml" deploy/compose.yaml
 install -m 0644 "$task_release/compose.production.yaml" deploy/compose.production.yaml
+install -m 0644 "$task_release/compose.no-backup.yaml" deploy/compose.no-backup.yaml
 install -m 0644 "$task_release/compose-release.sh" deploy/compose-release.sh
 install -m 0600 "$task_release/images.env" deploy/images.env
+printf 'BACKUP_ENABLED=%s\n' "${task_backup_enabled:-true}" > deploy/backup.env
+chmod 0600 deploy/backup.env
 printf '%s\n' "${task_release##*/}" > deploy/current-release

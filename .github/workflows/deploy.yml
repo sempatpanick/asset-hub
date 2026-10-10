@@ -98,6 +98,7 @@ jobs:
       packages: read
     env:
       DEPLOY_DIR: ${{ vars.DEPLOY_PATH != '' && vars.DEPLOY_PATH || '/srv/projects/asset-hub' }}
+      DEPLOY_BACKUP_ENABLED: ${{ vars.BACKUP_ENABLED }}
       DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
       DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
       DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}

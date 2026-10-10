@@ -44,6 +44,7 @@ function fixture(t) {
   for (const name of [
     "compose.yaml",
     "compose.production.yaml",
+    "compose.no-backup.yaml",
     "compose-release.sh",
   ]) {
     copyFileSync(join(root, "deploy", name), join(directory, release, name));
@@ -62,7 +63,7 @@ function fixture(t) {
   script("mountpoint", '[[ "${FAKE_UNMOUNTED:-0}" != 1 ]]');
   script(
     "stat",
-    'if [[ "${FAKE_SAME_FS:-0}" == 1 || "$*" == *staging* ]]; then echo 1; else echo 2; fi',
+    'if [[ "${FAKE_SAME_FS:-0}" == 1 || "$*" == *"$FIXTURE_DATA"* ]]; then echo 1; else echo 2; fi',
   );
   script(
     "docker",
@@ -70,14 +71,14 @@ function fixture(t) {
 printf '%s\\0' "$@" >> "$COMMAND_LOG"
 printf '\\n' >> "$COMMAND_LOG"
 if [[ "$*" == *'config --environment'* ]]; then
-  printf 'APP_ENV=production\\nDATA_ROOT=%s\\nBACKUP_PATH=%s\\n' "$FIXTURE_DATA" "$FIXTURE_BACKUP"
+  printf 'APP_ENV=production\\nDATA_ROOT=%s\\nBACKUP_PATH=%s\\nBACKUP_ENABLED=%s\\n' "$FIXTURE_DATA" "$FIXTURE_BACKUP" "${"${BACKUP_ENABLED:-true}"}"
 fi
 if [[ "$1" == login ]]; then
   IFS= read -r credential
   [[ "$credential" == test-only-registry-token ]]
 fi
 if [[ "$1" == ps && "${"${FAKE_PORT_CONFLICT:-0}"}" == 1 ]]; then echo 'other-worker|other-project'; fi
-if [[ "$*" == *--exit-code-from* && "${"${FAKE_MIGRATION_FAILURE:-0}"}" == 1 ]]; then exit 7; fi
+if [[ "$*" == *'--exit-code-from migrate'* && "${"${FAKE_MIGRATION_FAILURE:-0}"}" == 1 ]]; then exit 7; fi
 `,
   );
   const env = { ...process.env };
@@ -195,7 +196,7 @@ test("healthy deployment promotes only after pull, quiesce, migration and health
   assert.equal(result.status, 0, result.stderr);
   const commands = f.commands();
   assert.ok(
-    commands.indexOf("pull postgres") < commands.indexOf("stop --timeout"),
+    commands.indexOf("pull storage-init") < commands.indexOf("stop --timeout"),
   );
   assert.ok(
     commands.indexOf("stop --timeout") <
@@ -235,6 +236,49 @@ test("SSH rejects shell injection before connecting", (t) => {
   });
   assert.notEqual(result.status, 0);
   assert.equal(f.commands(), "");
+});
+
+test("explicitly disabled backups allow a missing mount without modifying server secrets", (t) => {
+  const f = fixture(t);
+  rmSync(join(f.directory, "backup/.assethub-backup"));
+  const result = f.run("scripts/ci/deploy-release.sh", [release], {
+    DEPLOY_BACKUP_ENABLED: "false",
+    FAKE_UNMOUNTED: "1",
+    FAKE_SAME_FS: "1",
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Backups explicitly disabled/);
+  assert.match(
+    f.commands(),
+    /compose.no-backup.yaml.*--exit-code-from storage-init/,
+  );
+  assert.equal(
+    readFileSync(join(f.directory, "deploy/backup.env"), "utf8"),
+    "BACKUP_ENABLED=false\n",
+  );
+  assert.equal(
+    readFileSync(join(f.directory, ".env"), "utf8"),
+    "test-only protected environment\n",
+  );
+});
+
+test("invalid backup policy fails before pulling or stopping services", (t) => {
+  const f = fixture(t);
+  const result = f.run("scripts/ci/deploy-release.sh", [release], {
+    DEPLOY_BACKUP_ENABLED: "maybe",
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /true or false/);
+  assert.equal(f.commands(), "");
+});
+
+test("manual wrapper selects the disabled-backup Compose model", (t) => {
+  const f = fixture(t);
+  const result = f.run("deploy/compose-release.sh", ["ps"], {
+    BACKUP_ENABLED: "false",
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(f.commands(), /compose.no-backup.yaml ps/);
 });
 
 test("image tags follow committed service inputs and ignore unrelated docs", (t) => {

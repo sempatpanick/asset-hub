@@ -34,6 +34,13 @@ func NewIngestion(auth *Service, repo ports.UploadRepository, stage ports.Stagin
 func (s *Service) SetIngestion(i *Ingestion) { s.ingestion = i }
 func (s *Service) Ingestion() *Ingestion     { return s.ingestion }
 func (i *Ingestion) Enabled() bool           { return i != nil && i.crypto != nil }
+func (i *Ingestion) BackupEnabled() bool     { return i != nil && i.backup != nil }
+func (i *Ingestion) BackupRetentionDays() int {
+	if i.BackupEnabled() {
+		return 30
+	}
+	return 0
+}
 func (i *Ingestion) ProviderName() string {
 	if i == nil {
 		return "telegram"
@@ -58,11 +65,17 @@ func (i *Ingestion) Create(ctx context.Context, p domain.Principal, project, nam
 	if err != nil || size < 1 || size > domain.MaxAssetSize || (hash != "" && !validHash(hash)) {
 		return domain.Upload{}, domain.ErrInvalid
 	}
-	if err = i.backup.Check(); err != nil {
-		return domain.Upload{}, domain.ErrUnavailable
+	if i.BackupEnabled() {
+		if err = i.backup.Check(); err != nil {
+			return domain.Upload{}, domain.ErrUnavailable
+		}
 	}
 	u := domain.Upload{ID: i.auth.security.ID(), ProjectID: project, Name: n, Size: size, Status: "receiving", ExpectedSHA256: hash, Parts: []domain.UploadPart{}, CreatedAt: i.auth.clock.Now(), ExpiresAt: i.auth.clock.Now().Add(24 * time.Hour)}
-	return u, i.repo.ReserveUpload(ctx, p, u, i.capacity)
+	capacity := i.capacity
+	if !i.BackupEnabled() {
+		capacity /= 2
+	} // Reserve room for plaintext and temporary ciphertext.
+	return u, i.repo.ReserveUpload(ctx, p, u, capacity)
 }
 func (i *Ingestion) Get(ctx context.Context, p domain.Principal, id, action string) (domain.Upload, error) {
 	u, err := i.repo.Upload(ctx, id)
@@ -262,6 +275,9 @@ func (i *Ingestion) Cleanup(ctx context.Context) error {
 			return err
 		}
 	}
+	if !i.BackupEnabled() {
+		return nil
+	}
 	expired, err := i.repo.ExpiredBackups(ctx)
 	if err != nil {
 		return err
@@ -327,8 +343,10 @@ func (i *Ingestion) process(ctx context.Context, a domain.StoredAsset, lease str
 	if a.Provider != i.provider.Name() {
 		return &domain.StorageError{Code: "provider_changed", Permanent: true}
 	}
-	if err := i.backup.Check(); err != nil {
-		return err
+	if i.BackupEnabled() {
+		if err := i.backup.Check(); err != nil {
+			return err
+		}
 	}
 	key, err := i.crypto.UnwrapKey(a.ID, a.WrappedKey)
 	if err != nil {
@@ -351,7 +369,7 @@ func (i *Ingestion) process(ctx context.Context, a domain.StoredAsset, lease str
 		c, exists := chunks[index]
 		var ciphertext []byte
 		if exists {
-			ciphertext, err = i.backup.OpenChunk(a.ID, c)
+			ciphertext, err = i.readCheckpoint(ctx, a, c)
 			if err != nil {
 				return err
 			}
@@ -374,7 +392,7 @@ func (i *Ingestion) process(ctx context.Context, a domain.StoredAsset, lease str
 			}
 			hash := sha256.Sum256(ciphertext)
 			c = domain.Chunk{Index: index, PlainSize: expected, CipherSize: int64(len(ciphertext)), SHA256: hex.EncodeToString(hash[:])}
-			if err = i.backup.PutChunk(a.ID, c, ciphertext); err != nil {
+			if err = i.writeCheckpoint(a, c, ciphertext); err != nil {
 				return err
 			}
 			if err = i.repo.SaveChunk(ctx, a.ID, lease, c); err != nil {
@@ -422,6 +440,9 @@ func (i *Ingestion) process(ctx context.Context, a domain.StoredAsset, lease str
 		}
 		a.Chunks = append(a.Chunks, c)
 	}
+	if !i.BackupEnabled() {
+		return i.repo.ReadyAsset(ctx, a.ID, lease)
+	}
 	// Recovery manifest includes protected references, key envelope, sizes and hashes.
 	a.Status = "ready"
 	data, err := json.Marshal(a)
@@ -436,4 +457,50 @@ func (i *Ingestion) process(ctx context.Context, a domain.StoredAsset, lease str
 		return err
 	}
 	return i.repo.ReadyAsset(ctx, a.ID, lease)
+}
+
+func (i *Ingestion) writeCheckpoint(a domain.StoredAsset, c domain.Chunk, data []byte) error {
+	if i.BackupEnabled() {
+		return i.backup.PutChunk(a.ID, c, data)
+	}
+	stage, ok := i.stage.(ports.UploadCheckpoints)
+	if !ok {
+		return domain.ErrUnavailable
+	}
+	return stage.PutCheckpoint(a.UploadID, c, data)
+}
+func (i *Ingestion) readCheckpoint(ctx context.Context, a domain.StoredAsset, c domain.Chunk) ([]byte, error) {
+	var data []byte
+	var err error = domain.ErrUnavailable
+	if i.BackupEnabled() {
+		data, err = i.backup.OpenChunk(a.ID, c)
+	} else if stage, ok := i.stage.(ports.UploadCheckpoints); ok {
+		data, err = stage.OpenCheckpoint(a.UploadID, c)
+	}
+	if err == nil {
+		return data, nil
+	}
+	if len(c.Reference) == 0 {
+		return nil, err
+	}
+	ref, err := i.crypto.OpenReference(a.ID, c.Index, c.Reference)
+	if err != nil {
+		return nil, err
+	}
+	chunkCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+	defer cancel()
+	data, err = i.provider.Open(chunkCtx, ref)
+	if err != nil {
+		return nil, err
+	}
+	hash := sha256.Sum256(data)
+	if int64(len(data)) != c.CipherSize || hex.EncodeToString(hash[:]) != c.SHA256 {
+		return nil, domain.ErrIntegrity
+	}
+	if i.BackupEnabled() {
+		if err = i.backup.PutChunk(a.ID, c, data); err != nil {
+			return nil, err
+		}
+	}
+	return data, nil
 }

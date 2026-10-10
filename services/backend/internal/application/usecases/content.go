@@ -146,7 +146,7 @@ func (i *Ingestion) Restore(ctx context.Context, p domain.Principal, id string) 
 	if !p.IsAdmin() {
 		return domain.ErrForbidden
 	}
-	if !i.Enabled() {
+	if !i.Enabled() || !i.BackupEnabled() {
 		return domain.ErrUnavailable
 	}
 	a, err := i.repo.Asset(ctx, id)
@@ -231,7 +231,7 @@ func (i *Ingestion) fetchChunk(ctx context.Context, a domain.StoredAsset, c doma
 			err = domain.ErrIntegrity
 		}
 	}
-	if err != nil {
+	if err != nil && i.BackupEnabled() {
 		data, err = i.backup.OpenChunk(a.ID, c)
 	}
 	if err != nil {

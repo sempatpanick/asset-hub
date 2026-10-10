@@ -7,6 +7,11 @@ set -euo pipefail
 : "${GITHUB_SHA:?A release commit is required}"
 : "${GHCR_USER:?A registry username is required}"
 : "${GHCR_TOKEN:?A registry token is required}"
+case "${DEPLOY_BACKUP_ENABLED:-}" in '' | true | false) ;; *)
+  echo 'BACKUP_ENABLED must be true or false.' >&2
+  exit 1
+  ;;
+esac
 [[ "$DEPLOY_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]+$ && "$DEPLOY_HOST" == *.* ]] || {
   echo 'Use the Cloudflare SSH hostname.' >&2
   exit 1
@@ -44,7 +49,7 @@ Host orangepi
 EOF
 task_remote_release="$DEPLOY_DIR/deploy/releases/$GITHUB_SHA"
 ssh -F "$task_ssh/config" orangepi "mkdir -p '$task_remote_release'"
-scp -F "$task_ssh/config" deploy/compose.yaml deploy/compose.production.yaml deploy/compose-release.sh \
+scp -F "$task_ssh/config" deploy/compose.yaml deploy/compose.production.yaml deploy/compose.no-backup.yaml deploy/compose-release.sh \
   deploy/images.env scripts/ci/deploy-release.sh .env.example scripts/prepare-host.sh "orangepi:$task_remote_release/"
 printf '%s\n' "$GHCR_TOKEN" | ssh -F "$task_ssh/config" orangepi \
-  "cd '$DEPLOY_DIR' && GHCR_USER='$GHCR_USER' bash 'deploy/releases/$GITHUB_SHA/deploy-release.sh' 'deploy/releases/$GITHUB_SHA'"
+  "cd '$DEPLOY_DIR' && GHCR_USER='$GHCR_USER' DEPLOY_BACKUP_ENABLED='${DEPLOY_BACKUP_ENABLED:-}' bash 'deploy/releases/$GITHUB_SHA/deploy-release.sh' 'deploy/releases/$GITHUB_SHA'"

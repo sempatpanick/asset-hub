@@ -44,3 +44,34 @@ Dashboard TypeScript remains 7.0.2; the OpenAPI generator requires its compatibl
 With Go 1.27.2, format changed Go files with `gofmt -w`, verify `gofmt -l .` has no output, then run `go build ./...`, `go vet ./...` and `go test ./...` in services/backend. Integration tests require dedicated PostgreSQL/Redis instances and create disposable databases. Browser tests use real persistent APIs and a clearly labeled development provider. Start the browser fixture before running the combined `sh scripts/test.sh` checks. See docs/VERIFICATION.md for fixture setup. Repository agents must follow AGENTS.md and run formatting, type/compile checks, lint and tests for each affected component before completing changes.
 
 Domain/application have no framework, SQL, Telegram or queue-library dependencies. Inbound adapters invoke use cases; outbound adapters implement application ports; composition roots wire concrete dependencies. Typed SQL mappings are isolated in the PostgreSQL adapter and verified with real databases. No sqlc-generated persistence types enter the domain.
+
+## Temporarily operate without independent backups
+
+Independent encrypted backup remains the default. Setting `BACKUP_ENABLED=false`
+explicitly opts out of retained asset backups, backup download fallback and deleted
+asset restoration. Uploads still require verified encrypted primary storage. Temporary
+encrypted retry checkpoints remain under the staging SSD alongside upload parts and
+are removed by the worker after completion/cancellation cleanup; they are not recovery
+backups. Logical staging reservations are halved in this mode to leave room for both
+plaintext parts and temporary ciphertext. Production disk reserve checks remain active.
+
+For GitHub deployments, set repository **Actions variable** `BACKUP_ENABLED` to
+`false`. The workflow selects `deploy/compose.no-backup.yaml`, omits the backup bind
+mounts and records the active policy in ignored `deploy/backup.env`. It preserves the
+server `.env`. The dashboard reports backups disabled and offers no restore action.
+The storage initializer prepares only staging/cache/local directories with application
+ownership; it never creates a backup marker or claims a same-disk directory is independent.
+
+For source-based manual deployment, set `BACKUP_ENABLED=false` in the protected
+`.env` and include `-f deploy/compose.no-backup.yaml` after the base Compose file.
+After an Actions deployment, use `bash deploy/compose-release.sh` as usual; it loads
+the recorded policy automatically.
+
+To enable backups later, provision and verify the independent mount using
+`scripts/prepare-host.sh`, then set the Actions variable to `true` and deploy again.
+Drain unfinished uploads before changing modes. Enabling backups protects new uploads;
+it does not retroactively create backups for assets uploaded while disabled. Re-upload
+those assets through AssetHub to create verified backups. Existing encrypted backup
+files are not deleted by disabling the feature. PostgreSQL metadata and offline master
+keys remain essential for recovery; without independent copies, primary storage or SSD
+loss can cause permanent data loss. Database snapshots still require a configured destination.
