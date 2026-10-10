@@ -27,7 +27,7 @@ type Repository interface {
 	RevokeKey(context.Context, domain.Principal, string, string) error
 	Overview(context.Context, domain.Principal) (domain.Overview, error)
 	Assets(context.Context, domain.Principal, string, string, string, string, int, int) ([]domain.Asset, error)
-	Activity(context.Context, domain.Principal, int, int) ([]domain.Activity, error)
+	Activity(context.Context, domain.Principal, string, string, string, int, int) ([]domain.Activity, error)
 }
 type Security interface {
 	ID() string

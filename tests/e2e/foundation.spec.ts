@@ -156,7 +156,9 @@ test("mobile navigation and dialog remain within the viewport", async ({
   await expect(page.getByRole("dialog")).not.toBeVisible();
   await page.getByRole("button", { name: "Open navigation" }).click();
   await page.getByRole("link", { name: "File Manager", exact: true }).click();
-  await expect(page.getByLabel("File type filter")).toBeVisible();
+  await expect(
+    page.getByRole("combobox", { name: "File type filter", exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByText("Loading your workspace…", { exact: true }),
   ).not.toBeVisible();
@@ -169,4 +171,33 @@ test("mobile navigation and dialog remain within the viewport", async ({
     path: ".local/screenshots/mobile-files.png",
     fullPage: true,
   });
+  await page
+    .getByRole("combobox", { name: "File type filter", exact: true })
+    .click();
+  await page
+    .getByRole("combobox", { name: "Search file type filter", exact: true })
+    .fill("Documents");
+  const popup = await page.locator(".select-popup:popover-open").boundingBox();
+  expect(popup?.x).toBeGreaterThanOrEqual(0);
+  expect((popup?.x ?? 0) + (popup?.width ?? 0)).toBeLessThanOrEqual(390);
+  await page
+    .getByRole("option", { name: "Documents & archives", exact: true })
+    .click();
+  await page
+    .getByLabel("Search workspace assets", { exact: true })
+    .fill("mobile-nonexistent");
+  await page
+    .getByRole("button", { name: "Search assets", exact: true })
+    .click();
+  await expect(page.getByLabel("Search files", { exact: true })).toHaveValue(
+    "mobile-nonexistent",
+  );
+  await expect(
+    page.getByText("No matching assets", { exact: true }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
 });

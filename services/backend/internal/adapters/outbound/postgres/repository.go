@@ -357,8 +357,8 @@ func (r *Repository) Assets(ctx context.Context, p domain.Principal, project, qu
 	}
 	return result, rows.Err()
 }
-func (r *Repository) Activity(ctx context.Context, p domain.Principal, limit, offset int) ([]domain.Activity, error) {
-	rows, err := r.Pool.Query(ctx, "SELECT e.id,e.actor_id,e.action,COALESCE(e.project_id::text,''),e.object_id,e.detail,e.created_at FROM audit_events e LEFT JOIN projects p ON p.id=e.project_id WHERE $1 OR (e.project_id IS NOT NULL AND EXISTS(SELECT 1 FROM project_members m WHERE m.project_id=e.project_id AND m.user_id::text=$2)) OR (e.project_id IS NULL AND e.actor_id=$3) ORDER BY e.created_at DESC,e.id DESC LIMIT $4 OFFSET $5", p.IsAdmin(), p.User.ID, p.User.Email, limit, offset)
+func (r *Repository) Activity(ctx context.Context, p domain.Principal, query, action, project string, limit, offset int) ([]domain.Activity, error) {
+	rows, err := r.Pool.Query(ctx, "SELECT e.id,e.actor_id,e.action,COALESCE(e.project_id::text,''),e.object_id,e.detail,e.created_at FROM audit_events e LEFT JOIN projects p ON p.id=e.project_id WHERE ($1 OR (e.project_id IS NOT NULL AND EXISTS(SELECT 1 FROM project_members m WHERE m.project_id=e.project_id AND m.user_id::text=$2)) OR (e.project_id IS NULL AND e.actor_id=$3)) AND ($6='' OR position(lower($6) in lower(concat_ws(' ',e.action,e.actor_id,e.detail,e.object_id)))>0) AND ($7='' OR starts_with(e.action,$7)) AND ($8='' OR e.project_id::text=$8) ORDER BY e.created_at DESC,e.id DESC LIMIT $4 OFFSET $5", p.IsAdmin(), p.User.ID, p.User.Email, limit, offset, query, action, project)
 	if err != nil {
 		return nil, err
 	}

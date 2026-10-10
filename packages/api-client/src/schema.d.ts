@@ -1278,6 +1278,12 @@ export interface operations {
             query?: {
                 limit?: components["parameters"]["Limit"];
                 offset?: components["parameters"]["Offset"];
+                /** @description Case-insensitive search across authorized records */
+                q?: string;
+                /** @description Audit action prefix */
+                action?: string;
+                /** @description Restrict to an authorized project */
+                project_id?: string;
             };
             header?: never;
             path?: never;
@@ -1303,6 +1309,12 @@ export interface operations {
             query?: {
                 limit?: components["parameters"]["Limit"];
                 offset?: components["parameters"]["Offset"];
+                /** @description Case-insensitive search across authorized records */
+                q?: string;
+                /** @description Effective asset or transfer status */
+                status?: string;
+                /** @description Restrict to an authorized project */
+                project_id?: string;
             };
             header?: never;
             path?: never;

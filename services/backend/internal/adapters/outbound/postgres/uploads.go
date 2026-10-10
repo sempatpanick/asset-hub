@@ -63,8 +63,8 @@ func (r *Repository) Upload(ctx context.Context, id string) (domain.Upload, erro
 	}
 	return u, rows.Err()
 }
-func (r *Repository) Uploads(ctx context.Context, p domain.Principal, limit, offset int) ([]domain.Upload, error) {
-	rows, err := r.Pool.Query(ctx, "SELECT "+uploadColumns+" FROM uploads u JOIN projects p ON p.id=u.project_id WHERE "+access+" ORDER BY u.created_at DESC,u.id DESC LIMIT $4 OFFSET $5", p.IsAdmin(), p.ProjectID, p.User.ID, limit, offset)
+func (r *Repository) Uploads(ctx context.Context, p domain.Principal, query, status, project string, limit, offset int) ([]domain.Upload, error) {
+	rows, err := r.Pool.Query(ctx, "SELECT "+uploadColumns+" FROM uploads u JOIN projects p ON p.id=u.project_id WHERE "+access+" AND ($6='' OR position(lower($6) in lower(u.name))>0) AND ($7='' OR COALESCE(NULLIF((SELECT a.status FROM assets a WHERE a.id=u.asset_id),''),u.status)=$7) AND ($8='' OR u.project_id::text=$8) ORDER BY u.created_at DESC,u.id DESC LIMIT $4 OFFSET $5", p.IsAdmin(), p.ProjectID, p.User.ID, limit, offset, query, status, project)
 	if err != nil {
 		return nil, err
 	}

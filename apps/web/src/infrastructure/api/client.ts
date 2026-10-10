@@ -76,9 +76,11 @@ export async function request<T>(
     );
   return data as T;
 }
-export function mutate<T>(path: string, body?: unknown, method = "POST") {
-  return request<T>(path, {
+export async function mutate<T>(path: string, body?: unknown, method = "POST") {
+  const result = await request<T>(path, {
     method,
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
+  window.dispatchEvent(new Event("assethub:changed"));
+  return result;
 }

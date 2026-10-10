@@ -44,7 +44,7 @@ func (s *Server) uploads(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limit, offset := page(r)
-	values, err := i.List(r.Context(), current(r), limit, offset)
+	values, err := i.List(r.Context(), current(r), r.URL.Query().Get("q"), r.URL.Query().Get("status"), r.URL.Query().Get("project_id"), limit, offset)
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -53,7 +53,7 @@ func (s *Server) uploads(w http.ResponseWriter, r *http.Request) {
 	for _, u := range values {
 		items = append(items, uploadView(u))
 	}
-	reply(w, 200, map[string]any{"items": items})
+	reply(w, 200, map[string]any{"items": items, "limit": limit, "offset": offset})
 }
 func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 	i := s.ingest(w, r)

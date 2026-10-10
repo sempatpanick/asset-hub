@@ -1,4 +1,5 @@
 "use client";
+import { SearchSelect } from "./select";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
@@ -6,7 +7,6 @@ import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   Check,
-  ChevronLeft,
   ChevronRight,
   CloudUpload,
   Copy,
@@ -46,7 +46,15 @@ import type {
   User,
 } from "@assethub/api-client";
 import { mutate, request, setCsrf } from "@/infrastructure/api/client";
-import { bytes, useAction, useResource } from "@/features/hooks";
+import {
+  bytes,
+  useAction,
+  useResource,
+  useDebounced,
+  useLocationQuery,
+} from "@/features/hooks";
+import { HeaderSearch } from "./header-search";
+import { Pagination, TableSearch } from "./table-controls";
 import { Badge, Empty, ErrorNotice, LinkAction, Loading, Modal } from "./ui";
 import { UploadDialog, UploadHistory } from "./uploads";
 import { AssetDetails, safeImage, assetContent } from "./asset-details";
@@ -134,11 +142,31 @@ export default function Dashboard({ section }: { section: Section }) {
   const [editing, setEditing] = useState<Project>();
   const [selectedAsset, setSelectedAsset] = useState<Asset>();
   const [members, setMembers] = useState<Project>();
-  const [search, setSearch] = useState("");
+  const locationQuery = useLocationQuery();
+  const [searchInput, setSearch] = useState<string>();
+  const search =
+    searchInput ??
+    (section === "files"
+      ? (new URLSearchParams(locationQuery).get("q") ?? "")
+      : "");
+  const query = useDebounced(search);
   const [filter, setFilter] = useState("");
   const [fileType, setFileType] = useState("");
   const [grid, setGrid] = useState(false);
   const [offset, setOffset] = useState(0);
+  const [pageSize, setPageSize] = useState(50);
+  const resizePage = (size: number) => {
+    setPageSize(size);
+    setOffset(0);
+  };
+  const searchTable = (value: string) => {
+    setSearch(value);
+    setOffset(0);
+  };
+  const filterTable = (value: string) => {
+    setFilter(value);
+    setOffset(0);
+  };
   const action = useAction();
   useEffect(() => {
     const controller = new AbortController();
@@ -163,7 +191,7 @@ export default function Dashboard({ section }: { section: Section }) {
   const project =
     selectedProject ||
     (section === "api-keys" ? (managedProjects[0]?.id ?? "") : "");
-  const settings = useResource<Settings>(user ? "/settings" : null);
+  const settings = useResource<Settings>(user ? "/settings" : null, 30000);
   const overview = useResource<Overview>(
     user && section === "overview" ? "/overview" : null,
   );
@@ -172,11 +200,13 @@ export default function Dashboard({ section }: { section: Section }) {
   );
   const assets = useResource<Items<Asset>>(
     user && section === "files"
-      ? `/assets?project_id=${project}&q=${encodeURIComponent(search)}&status=${filter}&type=${encodeURIComponent(fileType)}&offset=${offset}`
+      ? `/assets?project_id=${project}&q=${encodeURIComponent(query)}&status=${filter}&type=${encodeURIComponent(fileType)}&offset=${offset}&limit=${pageSize}`
       : null,
   );
   const activity = useResource<Items<Activity>>(
-    user && section === "activity" ? `/activity?offset=${offset}` : null,
+    user && section === "activity"
+      ? `/activity?offset=${offset}&limit=${pageSize}&q=${encodeURIComponent(query)}&action=${encodeURIComponent(filter)}&project_id=${project}`
+      : null,
   );
   const keys = useResource<Items<ApiKey>>(
     user && section === "api-keys" && project
@@ -190,6 +220,26 @@ export default function Dashboard({ section }: { section: Section }) {
     activity.refresh();
     assets.refresh();
   };
+  const filteredProjects = allProjects.filter(
+    (p) =>
+      `${p.name} ${p.description}`
+        .toLowerCase()
+        .includes(query.toLowerCase()) &&
+      (!filter || p.role === filter),
+  );
+  const filteredKeys = (keys.data?.items ?? []).filter((k) => {
+    const status = k.revoked_at
+      ? "revoked"
+      : k.expires_at && new Date(k.expires_at) <= new Date()
+        ? "expired"
+        : "active";
+    return (
+      `${k.name} ${k.prefix} ${k.scopes.join(" ")}`
+        .toLowerCase()
+        .includes(query.toLowerCase()) &&
+      (!filter || status === filter)
+    );
+  });
   if (!user)
     return (
       <div className="boot-screen">
@@ -306,11 +356,9 @@ export default function Dashboard({ section }: { section: Section }) {
             <strong>{navigation.find((n) => n.id === section)?.title}</strong>
           </div>
           <div className="topbar-right">
-            <Link href="/files/" className="top-search">
-              <Search size={16} />
-              <span>Find an asset</span>
-              <kbd>/</kbd>
-            </Link>
+            <HeaderSearch
+              onSearch={section === "files" ? searchTable : undefined}
+            />
             <span className="top-divider" />
             <div className="user-menu">
               <span className="avatar">{initials(user.name)}</span>
@@ -345,18 +393,18 @@ export default function Dashboard({ section }: { section: Section }) {
               <p>{title[1]}</p>
             </div>
             <div className="heading-actions">
-              {["files", "api-keys"].includes(section) && (
+              {["files", "api-keys", "activity"].includes(section) && (
                 <label className="select-label">
                   <Folder size={15} />
-                  <select
+                  <SearchSelect
                     aria-label="Project filter"
                     value={project}
-                    onChange={(e) => {
-                      setProject(e.target.value);
+                    onValueChange={(value) => {
+                      setProject(value);
                       setOffset(0);
                     }}
                   >
-                    {section === "files" && (
+                    {section !== "api-keys" && (
                       <option value="">All projects</option>
                     )}
                     {(section === "api-keys"
@@ -367,7 +415,7 @@ export default function Dashboard({ section }: { section: Section }) {
                         {p.name}
                       </option>
                     ))}
-                  </select>
+                  </SearchSelect>
                 </label>
               )}
               {section === "projects" || section === "overview" ? (
@@ -432,70 +480,97 @@ export default function Dashboard({ section }: { section: Section }) {
           )}
           {section === "projects" && (
             <>
+              <section className="panel collection-toolbar">
+                <div className="file-toolbar">
+                  <TableSearch
+                    label="Search projects"
+                    value={search}
+                    onChange={searchTable}
+                  />
+                  <SearchSelect
+                    aria-label="Project role filter"
+                    value={filter}
+                    onValueChange={filterTable}
+                  >
+                    <option value="">All roles</option>
+                    {["viewer", "editor", "manager"].map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                  </SearchSelect>
+                </div>
+              </section>
               {projects.loading ? (
                 <Loading />
-              ) : allProjects.length ? (
+              ) : filteredProjects.length ? (
                 <div className="project-grid">
-                  {allProjects.map((p, i) => (
-                    <article className="panel project-card" key={p.id}>
-                      <div className="project-top">
-                        <span
-                          className={`project-symbol ${["violet", "blue", "peach", "mint"][i % 4]}`}
-                        >
-                          <Folder size={25} />
-                        </span>
-                        <Badge tone="neutral">{p.role}</Badge>
-                      </div>
-                      <h3>{p.name}</h3>
-                      <p>
-                        {p.description ||
-                          "A dedicated space for your application’s assets."}
-                      </p>
-                      <div className="project-stats">
-                        <span>
-                          <File size={14} />
-                          {p.files} files
-                        </span>
-                        <span>{bytes(p.used_bytes)}</span>
-                      </div>
-                      <div className="progress-track">
-                        <div
-                          style={{
-                            width: `${Math.min((p.used_bytes / p.quota_bytes) * 100, 100)}%`,
-                          }}
-                        />
-                      </div>
-                      <div className="project-capacity">
-                        {bytes(p.quota_bytes)} allocated
-                      </div>
-                      <div className="project-footer">
-                        <button
-                          className="text-link"
-                          onClick={() => setMembers(p)}
-                        >
-                          Members
-                          <ArrowRight size={14} />
-                        </button>
-                        {p.role === "manager" && (
-                          <button
-                            className="icon-button"
-                            aria-label={`Edit ${p.name}`}
-                            onClick={() => {
-                              setEditing(p);
-                              setModal("project");
-                            }}
+                  {filteredProjects
+                    .slice(offset, offset + pageSize)
+                    .map((p, i) => (
+                      <article className="panel project-card" key={p.id}>
+                        <div className="project-top">
+                          <span
+                            className={`project-symbol ${["violet", "blue", "peach", "mint"][i % 4]}`}
                           >
-                            <Settings2 size={17} />
+                            <Folder size={25} />
+                          </span>
+                          <Badge tone="neutral">{p.role}</Badge>
+                        </div>
+                        <h3>{p.name}</h3>
+                        <p>
+                          {p.description ||
+                            "A dedicated space for your application’s assets."}
+                        </p>
+                        <div className="project-stats">
+                          <span>
+                            <File size={14} />
+                            {p.files} files
+                          </span>
+                          <span>{bytes(p.used_bytes)}</span>
+                        </div>
+                        <div className="progress-track">
+                          <div
+                            style={{
+                              width: `${Math.min((p.used_bytes / p.quota_bytes) * 100, 100)}%`,
+                            }}
+                          />
+                        </div>
+                        <div className="project-capacity">
+                          {bytes(p.quota_bytes)} allocated
+                        </div>
+                        <div className="project-footer">
+                          <button
+                            className="text-link"
+                            onClick={() => setMembers(p)}
+                          >
+                            Members
+                            <ArrowRight size={14} />
                           </button>
-                        )}
-                      </div>
-                    </article>
-                  ))}
+                          {p.role === "manager" && (
+                            <button
+                              className="icon-button"
+                              aria-label={`Edit ${p.name}`}
+                              onClick={() => {
+                                setEditing(p);
+                                setModal("project");
+                              }}
+                            >
+                              <Settings2 size={17} />
+                            </button>
+                          )}
+                        </div>
+                      </article>
+                    ))}
                 </div>
               ) : (
                 <section className="panel">
                   <Empty
-                    title="Make room for your first project"
+                    title={
+                      search || filter
+                        ? "No matching projects"
+                        : "Make room for your first project"
+                    }
                     detail="Projects keep each application’s assets and API permissions together."
                     action={
                       <button
@@ -509,6 +584,14 @@ export default function Dashboard({ section }: { section: Section }) {
                   />
                 </section>
               )}
+              <Pagination
+                offset={offset}
+                count={filteredProjects.slice(offset, offset + pageSize).length}
+                pageSize={pageSize}
+                onChange={setOffset}
+                onPageSizeChange={resizePage}
+                hasMore={offset + pageSize < filteredProjects.length}
+              />
             </>
           )}
           {section === "files" && (
@@ -528,7 +611,7 @@ export default function Dashboard({ section }: { section: Section }) {
                   {search && (
                     <button
                       className="icon-button"
-                      onClick={() => setSearch("")}
+                      onClick={() => searchTable("")}
                       aria-label="Clear search"
                     >
                       <X size={15} />
@@ -537,11 +620,11 @@ export default function Dashboard({ section }: { section: Section }) {
                 </div>
                 <div className="file-controls">
                   <SlidersHorizontal size={16} />
-                  <select
+                  <SearchSelect
                     aria-label="Status filter"
                     value={filter}
-                    onChange={(e) => {
-                      setFilter(e.target.value);
+                    onValueChange={(value) => {
+                      setFilter(value);
                       setOffset(0);
                     }}
                   >
@@ -550,6 +633,7 @@ export default function Dashboard({ section }: { section: Section }) {
                       "ready",
                       "queued",
                       "uploading",
+                      "verifying",
                       "failed",
                       ...(user.role === "admin" ? ["deleted"] : []),
                     ].map((v) => (
@@ -557,12 +641,12 @@ export default function Dashboard({ section }: { section: Section }) {
                         {v}
                       </option>
                     ))}
-                  </select>
-                  <select
+                  </SearchSelect>
+                  <SearchSelect
                     aria-label="File type filter"
                     value={fileType}
-                    onChange={(e) => {
-                      setFileType(e.target.value);
+                    onValueChange={(value) => {
+                      setFileType(value);
                       setOffset(0);
                     }}
                   >
@@ -572,7 +656,7 @@ export default function Dashboard({ section }: { section: Section }) {
                     <option value="audio/">Audio</option>
                     <option value="text/">Text</option>
                     <option value="application/">Documents & archives</option>
-                  </select>
+                  </SearchSelect>
                   <div className="segmented">
                     <button
                       aria-label="List view"
@@ -601,26 +685,28 @@ export default function Dashboard({ section }: { section: Section }) {
                     grid={grid}
                     onSelect={setSelectedAsset}
                   />
-                  <Pagination
-                    offset={offset}
-                    count={assets.data.items.length}
-                    onChange={setOffset}
-                  />
                 </>
               ) : (
                 <Empty
                   title={
-                    search || filter
+                    search || filter || fileType || offset
                       ? "No matching assets"
                       : "A fresh start for your files"
                   }
                   detail={
-                    search || filter
+                    search || filter || fileType || offset
                       ? "Try another name, status, or project."
                       : "Choose a project and upload your first files."
                   }
                 />
               )}
+              <Pagination
+                offset={offset}
+                count={assets.data?.items.length ?? 0}
+                pageSize={pageSize}
+                onChange={setOffset}
+                onPageSizeChange={resizePage}
+              />
               <div className="panel-note">
                 <ShieldCheck size={15} />
                 {settings.data?.features.backups === false
@@ -649,6 +735,7 @@ export default function Dashboard({ section }: { section: Section }) {
                 />
               </div>
               <UploadHistory
+                projects={allProjects}
                 enabled={!!settings.data?.features.uploads}
                 onUpload={() => setModal("upload")}
               />
@@ -673,6 +760,25 @@ export default function Dashboard({ section }: { section: Section }) {
                 </Badge>
               </div>
               <ErrorNotice message={keys.error} />
+              <div className="file-toolbar">
+                <TableSearch
+                  label="Search API keys"
+                  value={search}
+                  onChange={searchTable}
+                />
+                <SearchSelect
+                  aria-label="Key status filter"
+                  value={filter}
+                  onValueChange={filterTable}
+                >
+                  <option value="">All statuses</option>
+                  {["active", "revoked", "expired"].map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </SearchSelect>
+              </div>
               {!project ? (
                 <Empty
                   title="Create a project to connect an application"
@@ -683,7 +789,7 @@ export default function Dashboard({ section }: { section: Section }) {
                 />
               ) : keys.loading ? (
                 <Loading />
-              ) : keys.data?.items.length ? (
+              ) : filteredKeys.length ? (
                 <div className="table-wrap">
                   <table>
                     <thead>
@@ -696,74 +802,80 @@ export default function Dashboard({ section }: { section: Section }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {keys.data.items.map((k) => (
-                        <tr key={k.id}>
-                          <td>
-                            <div className="key-name">
-                              <span className="file-icon blue">
-                                <KeyRound size={19} />
-                              </span>
-                              <div>
-                                <strong>{k.name}</strong>
-                                <code>{k.prefix}••••••</code>
+                      {filteredKeys
+                        .slice(offset, offset + pageSize)
+                        .map((k) => (
+                          <tr key={k.id}>
+                            <td>
+                              <div className="key-name">
+                                <span className="file-icon blue">
+                                  <KeyRound size={19} />
+                                </span>
+                                <div>
+                                  <strong>{k.name}</strong>
+                                  <code>{k.prefix}••••••</code>
+                                </div>
                               </div>
-                            </div>
-                          </td>
-                          <td>
-                            <div className="scope-list">
-                              {k.scopes.map((s) => (
-                                <Badge key={s}>{s.split(":")[1]}</Badge>
-                              ))}
-                            </div>
-                          </td>
-                          <td>
-                            <Badge
-                              tone={
-                                k.revoked_at
-                                  ? "neutral"
-                                  : k.expires_at &&
-                                      new Date(k.expires_at) < new Date()
-                                    ? "peach"
-                                    : "mint"
-                              }
-                            >
-                              {k.revoked_at
-                                ? "Revoked"
-                                : k.expires_at &&
-                                    new Date(k.expires_at) < new Date()
-                                  ? "Expired"
-                                  : "Active"}
-                            </Badge>
-                          </td>
-                          <td className="muted">{date(k.created_at)}</td>
-                          <td>
-                            {!k.revoked_at && (
-                              <button
-                                className="button small danger"
-                                disabled={action.busy}
-                                onClick={() =>
-                                  void action.run(async () => {
-                                    await mutate(
-                                      `/api-keys/${k.id}?project_id=${project}`,
-                                      undefined,
-                                      "DELETE",
-                                    );
-                                    keys.refresh();
-                                  })
+                            </td>
+                            <td>
+                              <div className="scope-list">
+                                {k.scopes.map((s) => (
+                                  <Badge key={s}>{s.split(":")[1]}</Badge>
+                                ))}
+                              </div>
+                            </td>
+                            <td>
+                              <Badge
+                                tone={
+                                  k.revoked_at
+                                    ? "neutral"
+                                    : k.expires_at &&
+                                        new Date(k.expires_at) < new Date()
+                                      ? "peach"
+                                      : "mint"
                                 }
                               >
-                                Revoke
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
+                                {k.revoked_at
+                                  ? "Revoked"
+                                  : k.expires_at &&
+                                      new Date(k.expires_at) < new Date()
+                                    ? "Expired"
+                                    : "Active"}
+                              </Badge>
+                            </td>
+                            <td className="muted">{date(k.created_at)}</td>
+                            <td>
+                              {!k.revoked_at && (
+                                <button
+                                  className="button small danger"
+                                  disabled={action.busy}
+                                  onClick={() =>
+                                    void action.run(async () => {
+                                      await mutate(
+                                        `/api-keys/${k.id}?project_id=${project}`,
+                                        undefined,
+                                        "DELETE",
+                                      );
+                                      keys.refresh();
+                                    })
+                                  }
+                                >
+                                  Revoke
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
                     </tbody>
                   </table>
                 </div>
               ) : (
                 <Empty
-                  title="Your applications are ready to connect"
+                  title={
+                    search || filter
+                      ? "No matching API keys"
+                      : "Your applications are ready to connect"
+                  }
                   detail="Create a key for this project. You’ll see its secret once."
                   action={
                     <button
@@ -776,6 +888,14 @@ export default function Dashboard({ section }: { section: Section }) {
                   }
                 />
               )}
+              <Pagination
+                offset={offset}
+                count={filteredKeys.slice(offset, offset + pageSize).length}
+                pageSize={pageSize}
+                onChange={setOffset}
+                onPageSizeChange={resizePage}
+                hasMore={offset + pageSize < filteredKeys.length}
+              />
               <div className="panel-note">
                 <LockNote />
                 Keep API keys on your application server. Never include them in
@@ -793,6 +913,34 @@ export default function Dashboard({ section }: { section: Section }) {
                 <Badge>Audit trail</Badge>
               </div>
               <ErrorNotice message={activity.error} />
+              <div className="file-toolbar">
+                <TableSearch
+                  label="Search activity"
+                  value={search}
+                  onChange={searchTable}
+                />
+                <SearchSelect
+                  aria-label="Activity action filter"
+                  value={filter}
+                  onValueChange={filterTable}
+                >
+                  <option value="">All actions</option>
+                  {[
+                    "project.",
+                    "member.",
+                    "key.",
+                    "upload.",
+                    "asset.",
+                    "auth.",
+                    "user.",
+                    "admin.",
+                  ].map((s) => (
+                    <option key={s} value={s}>
+                      {s.slice(0, -1)}
+                    </option>
+                  ))}
+                </SearchSelect>
+              </div>
               {activity.loading ? (
                 <Loading />
               ) : activity.data?.items.length ? (
@@ -812,18 +960,24 @@ export default function Dashboard({ section }: { section: Section }) {
                       </div>
                     ))}
                   </div>
-                  <Pagination
-                    offset={offset}
-                    count={activity.data.items.length}
-                    onChange={setOffset}
-                  />
                 </>
               ) : (
                 <Empty
-                  title="Your workspace history starts here"
+                  title={
+                    search || filter || project || offset
+                      ? "No matching activity"
+                      : "Your workspace history starts here"
+                  }
                   detail="Project, membership, and API key changes appear automatically."
                 />
               )}
+              <Pagination
+                offset={offset}
+                count={activity.data?.items.length ?? 0}
+                pageSize={pageSize}
+                onChange={setOffset}
+                onPageSizeChange={resizePage}
+              />
             </section>
           )}
           {section === "settings" && (
@@ -1205,7 +1359,7 @@ function OverviewView({
             <LinkAction href="/files/">View all files</LinkAction>
           </div>
           {data.recent.length ? (
-            <AssetList assets={data.recent} />
+            <AssetList assets={data.recent} controls />
           ) : (
             <Empty
               title="A home for your first asset"
@@ -1287,15 +1441,28 @@ function AssetList({
   assets,
   grid = false,
   onSelect,
+  controls = false,
 }: {
   assets: Asset[];
   grid?: boolean;
   onSelect?: (asset: Asset) => void;
+  controls?: boolean;
 }) {
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("");
+  const [kind, setKind] = useState("");
+  const shown = controls
+    ? assets.filter(
+        (a) =>
+          a.name.toLowerCase().includes(search.toLowerCase()) &&
+          (!status || a.status === status) &&
+          (!kind || a.mime.startsWith(kind)),
+      )
+    : assets;
   if (grid)
     return (
       <div className="asset-grid">
-        {assets.map((a) => (
+        {shown.map((a) => (
           <article className="asset-tile" key={a.id}>
             <div className="asset-preview">
               {a.status === "ready" && safeImage(a.mime) ? (
@@ -1326,82 +1493,93 @@ function AssetList({
       </div>
     );
   return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>File name</th>
-            <th>Size</th>
-            <th>Status</th>
-            <th>Added</th>
-          </tr>
-        </thead>
-        <tbody>
-          {assets.map((a) => (
-            <tr key={a.id}>
-              <td>
-                <div className="file-name">
-                  <FileIcon mime={a.mime} />
-                  <div>
-                    {onSelect ? (
-                      <button
-                        className="asset-name-button"
-                        onClick={() => onSelect(a)}
-                      >
-                        {a.name}
-                      </button>
-                    ) : (
-                      <strong>{a.name}</strong>
-                    )}
-                    <span>{a.mime}</span>
-                  </div>
-                </div>
-              </td>
-              <td>{bytes(a.size_bytes)}</td>
-              <td>
-                <Badge tone={a.status === "ready" ? "mint" : "neutral"}>
-                  {a.status}
-                </Badge>
-              </td>
-              <td className="muted">{date(a.created_at)}</td>
+    <>
+      {controls && (
+        <div className="file-toolbar">
+          <TableSearch
+            label="Search recent assets"
+            value={search}
+            onChange={setSearch}
+          />
+          <div className="file-controls">
+            <SearchSelect
+              aria-label="Recent asset status filter"
+              value={status}
+              onValueChange={setStatus}
+            >
+              <option value="">All statuses</option>
+              {Array.from(new Set(assets.map((a) => a.status))).map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </SearchSelect>
+            <SearchSelect
+              aria-label="Recent asset type filter"
+              value={kind}
+              onValueChange={setKind}
+            >
+              <option value="">All types</option>
+              {["image/", "video/", "audio/", "text/", "application/"].map(
+                (s) => (
+                  <option key={s} value={s}>
+                    {s.slice(0, -1)}
+                  </option>
+                ),
+              )}
+            </SearchSelect>
+          </div>
+        </div>
+      )}
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>File name</th>
+              <th>Size</th>
+              <th>Status</th>
+              <th>Added</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-function Pagination({
-  offset,
-  count,
-  onChange,
-}: {
-  offset: number;
-  count: number;
-  onChange: (n: number) => void;
-}) {
-  return (
-    <div className="pagination">
-      <span>{count ? `${offset + 1}–${offset + count}` : "No results"}</span>
-      <div>
-        <button
-          className="icon-button"
-          disabled={!offset}
-          onClick={() => onChange(Math.max(0, offset - 50))}
-          aria-label="Previous page"
-        >
-          <ChevronLeft size={17} />
-        </button>
-        <button
-          className="icon-button"
-          disabled={count < 50}
-          onClick={() => onChange(offset + 50)}
-          aria-label="Next page"
-        >
-          <ChevronRight size={17} />
-        </button>
+          </thead>
+          <tbody>
+            {shown.map((a) => (
+              <tr key={a.id}>
+                <td>
+                  <div className="file-name">
+                    <FileIcon mime={a.mime} />
+                    <div>
+                      {onSelect ? (
+                        <button
+                          className="asset-name-button"
+                          onClick={() => onSelect(a)}
+                        >
+                          {a.name}
+                        </button>
+                      ) : (
+                        <strong>{a.name}</strong>
+                      )}
+                      <span>{a.mime}</span>
+                    </div>
+                  </div>
+                </td>
+                <td>{bytes(a.size_bytes)}</td>
+                <td>
+                  <Badge tone={a.status === "ready" ? "mint" : "neutral"}>
+                    {a.status}
+                  </Badge>
+                </td>
+                <td className="muted">{date(a.created_at)}</td>
+              </tr>
+            ))}
+            {!shown.length && (
+              <tr>
+                <td colSpan={4}>No matching assets</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
-    </div>
+    </>
   );
 }
 function SettingsRow({ label, value }: { label: string; value: string }) {
@@ -1606,12 +1784,16 @@ function KeyDialog({
           </fieldset>
           <label>
             Expires after
-            <select value={days} onChange={(e) => setDays(e.target.value)}>
+            <SearchSelect
+              aria-label="Expires after"
+              value={days}
+              onValueChange={(value) => setDays(value)}
+            >
               <option value="7">7 days</option>
               <option value="30">30 days</option>
               <option value="90">90 days</option>
               <option value="365">1 year</option>
-            </select>
+            </SearchSelect>
           </label>
           <div className="modal-actions">
             <button type="button" className="button" onClick={onClose}>
@@ -1695,14 +1877,18 @@ function InviteDialog({ onClose }: { onClose: () => void }) {
           </label>
           <label>
             Installation role
-            <select value={role} onChange={(e) => setRole(e.target.value)}>
+            <SearchSelect
+              aria-label="Installation role"
+              value={role}
+              onValueChange={(value) => setRole(value)}
+            >
               <option value="member">
                 Member — project access assigned separately
               </option>
               <option value="admin">
                 Administrator — full installation access
               </option>
-            </select>
+            </SearchSelect>
           </label>
           <div className="modal-actions">
             <button className="button" type="button" onClick={onClose}>
@@ -1727,6 +1913,8 @@ function MembersDialog({
   const data = useResource<Items<Member>>(`/projects/${project.id}/members`);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("viewer");
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
   const action = useAction();
   return (
     <Modal
@@ -1735,20 +1923,47 @@ function MembersDialog({
       onClose={onClose}
     >
       <ErrorNotice message={data.error || action.error} />
+      <div className="file-toolbar">
+        <TableSearch
+          label="Search members"
+          value={search}
+          onChange={setSearch}
+        />
+        <SearchSelect
+          aria-label="Member role filter"
+          value={roleFilter}
+          onValueChange={setRoleFilter}
+        >
+          <option value="">All roles</option>
+          {["viewer", "editor", "manager"].map((r) => (
+            <option key={r} value={r}>
+              {r}
+            </option>
+          ))}
+        </SearchSelect>
+      </div>
       {data.loading ? (
         <Loading />
       ) : (
         <div className="member-list">
-          {data.data?.items.map((m) => (
-            <div className="member-row" key={m.user_id}>
-              <span className="avatar">{initials(m.name)}</span>
-              <div>
-                <strong>{m.name}</strong>
-                <span>{m.email}</span>
+          {data.data?.items
+            .filter(
+              (m) =>
+                `${m.name} ${m.email}`
+                  .toLowerCase()
+                  .includes(search.toLowerCase()) &&
+                (!roleFilter || m.role === roleFilter),
+            )
+            .map((m) => (
+              <div className="member-row" key={m.user_id}>
+                <span className="avatar">{initials(m.name)}</span>
+                <div>
+                  <strong>{m.name}</strong>
+                  <span>{m.email}</span>
+                </div>
+                <Badge>{m.role}</Badge>
               </div>
-              <Badge>{m.role}</Badge>
-            </div>
-          ))}
+            ))}
         </div>
       )}
       {project.role === "manager" && (
@@ -1775,11 +1990,15 @@ function MembersDialog({
           </label>
           <label>
             Project role
-            <select value={role} onChange={(e) => setRole(e.target.value)}>
+            <SearchSelect
+              aria-label="Project role"
+              value={role}
+              onValueChange={(value) => setRole(value)}
+            >
               <option value="viewer">Viewer</option>
               <option value="editor">Editor</option>
               <option value="manager">Manager</option>
-            </select>
+            </SearchSelect>
           </label>
           <button className="button primary" disabled={action.busy}>
             {action.busy ? "Saving…" : "Add or update member"}

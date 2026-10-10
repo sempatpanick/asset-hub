@@ -298,6 +298,27 @@ func TestDurableIngestion(t *testing.T) {
 		t.Fatal("cross-project session disclosed")
 	}
 	readOnly := domain.Principal{KeyID: sec.ID(), ProjectID: project.ID, Scopes: []string{"assets:read"}}
+	// Apply search and effective asset status before paging, retaining project isolation.
+	listed, err := ingest.List(ctx, p, "SMALL.TXT", "ready", project.ID, 1, 0)
+	if err != nil || len(listed) != 1 || listed[0].ID != u.ID {
+		t.Fatal("upload search and asset status", err, listed)
+	}
+	listed, err = ingest.List(ctx, p, "SMALL.TXT", "ready", project.ID, 1, 1)
+	if err != nil || len(listed) != 0 {
+		t.Fatal("upload matching offset", err, listed)
+	}
+	listed, err = ingest.List(ctx, foreign, "small", "ready", project.ID, 50, 0)
+	if err != nil || len(listed) != 0 {
+		t.Fatal("upload filter crossed key project boundary", err, listed)
+	}
+	listed, err = ingest.List(ctx, readOnly, "reserved", "cancelled", quotaProject.ID, 50, 0)
+	if err != nil || len(listed) != 0 {
+		t.Fatal("upload filter leaked another project's transfer", err, listed)
+	}
+	listed, err = ingest.List(ctx, p, "reserved", "cancelled", quotaProject.ID, 50, 0)
+	if err != nil || len(listed) != 1 || listed[0].ID != reserved.ID {
+		t.Fatal("upload transfer status filter", err, listed)
+	}
 	if _, err = ingest.Create(ctx, readOnly, project.ID, "denied", 1, ""); !errors.Is(err, domain.ErrForbidden) {
 		t.Fatal("read key uploaded")
 	}

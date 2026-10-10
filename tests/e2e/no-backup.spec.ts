@@ -1,3 +1,4 @@
+import { selectOption } from "./select";
 import { test, expect } from "@playwright/test";
 
 test("backups disabled allows real uploads and hides restore", async ({
@@ -37,7 +38,7 @@ test("backups disabled allows real uploads and hides restore", async ({
   expect(settings.backup_retention_days).toBe(0);
   await page.getByRole("link", { name: "File Manager", exact: true }).click();
   await page.getByRole("button", { name: "Upload files", exact: true }).click();
-  await page.getByLabel("Upload project").selectOption({ label: project });
+  await selectOption(page, "Upload project", project);
   await page
     .locator('input[type="file"]')
     .setInputFiles({ name, mimeType: "text/plain", buffer: data });
@@ -79,7 +80,7 @@ test("backups disabled allows real uploads and hides restore", async ({
     .click();
   await expect(page.getByRole("dialog")).not.toBeVisible();
   expect((await page.request.get(signed)).status()).toBe(404);
-  await page.getByLabel("Status filter").selectOption("deleted");
+  await selectOption(page, "Status filter", "deleted");
   await page.getByRole("button", { name, exact: true }).click();
   await expect(
     page.getByText(

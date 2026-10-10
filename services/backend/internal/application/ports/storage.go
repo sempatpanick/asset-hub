@@ -10,7 +10,7 @@ import (
 type UploadRepository interface {
 	ReserveUpload(context.Context, domain.Principal, domain.Upload, int64) error
 	Upload(context.Context, string) (domain.Upload, error)
-	Uploads(context.Context, domain.Principal, int, int) ([]domain.Upload, error)
+	Uploads(context.Context, domain.Principal, string, string, string, int, int) ([]domain.Upload, error)
 	RecordPart(context.Context, string, domain.UploadPart) error
 	BeginCompletion(context.Context, string) (domain.Upload, error)
 	ResetCompletion(context.Context, string) error

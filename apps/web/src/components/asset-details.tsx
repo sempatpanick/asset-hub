@@ -1,4 +1,5 @@
 "use client";
+import { SearchSelect } from "./select";
 import { useState } from "react";
 import Image from "next/image";
 import {
@@ -10,7 +11,7 @@ import {
 } from "lucide-react";
 import type { Asset } from "@assethub/api-client";
 import { mutate } from "@/infrastructure/api/client";
-import { bytes, useAction } from "@/features/hooks";
+import { bytes, useAction, useResource } from "@/features/hooks";
 import { Badge, ErrorNotice, Modal } from "./ui";
 export function safeImage(mime: string) {
   return [
@@ -28,7 +29,7 @@ export function assetContent(id: string) {
   return `/v1/assets/${encodeURIComponent(id)}/content`;
 }
 export function AssetDetails({
-  asset,
+  asset: initialAsset,
   canWrite,
   canManage,
   isAdmin,
@@ -44,6 +45,8 @@ export function AssetDetails({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const metadata = useResource<Asset>(`/assets/${initialAsset.id}`);
+  const asset = metadata.data ?? initialAsset;
   const [name, setName] = useState(asset.name);
   const [visibility, setVisibility] = useState(asset.visibility);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -116,14 +119,15 @@ export function AssetDetails({
         </label>
         <label className="upload-project">
           Visibility
-          <select
+          <SearchSelect
+            aria-label="Visibility"
             value={visibility}
-            onChange={(e) => setVisibility(e.target.value)}
+            onValueChange={(value) => setVisibility(value)}
             disabled={!canManage || asset.status === "deleted"}
           >
             <option value="private">Private — project access required</option>
             <option value="public">Public — anyone with the URL</option>
-          </select>
+          </SearchSelect>
         </label>
         <div className="details-checksum">
           <span>SHA-256</span>
@@ -131,7 +135,7 @@ export function AssetDetails({
           <span>Asset ID</span>
           <code>{asset.id}</code>
         </div>
-        <ErrorNotice message={action.error} />
+        <ErrorNotice message={action.error || metadata.error} />
         {asset.status !== "deleted" && (
           <div className="modal-actions">
             <button

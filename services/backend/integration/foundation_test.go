@@ -175,6 +175,10 @@ func TestPersistentFoundation(t *testing.T) {
 	if status != 200 || len(list["items"].([]any)) != 0 {
 		t.Fatal("unassigned viewer saw project", status)
 	}
+	status, filteredBeforeMembership, _ := call("GET", "/v1/activity?q=admin&project_id="+id, nil, vc, "", "")
+	if status != 200 || len(filteredBeforeMembership["items"].([]any)) != 0 {
+		t.Fatal("audit filtering exposed an unassigned project", status, filteredBeforeMembership)
+	}
 	status, _, _ = call("POST", "/v1/projects/"+id+"/members", map[string]string{"email": "viewer@example.test", "role": "viewer"}, cookie, csrf, "")
 	if status != 200 {
 		t.Fatal("assign viewer", status)
@@ -206,6 +210,22 @@ func TestPersistentFoundation(t *testing.T) {
 	status, events, _ := call("GET", "/v1/activity", nil, cookie, "", "")
 	if status != 200 || len(events["items"].([]any)) < 8 {
 		t.Fatal("missing audit events", status)
+	}
+	status, filtered, _ := call("GET", "/v1/activity?q=APPLICATION&action=key.&project_id="+id+"&limit=1", nil, cookie, "", "")
+	if status != 200 || len(filtered["items"].([]any)) != 1 {
+		t.Fatal("audit filters before pagination", status, filtered)
+	}
+	status, filtered, _ = call("GET", "/v1/activity?action=key.revoked&project_id="+id+"&limit=1&offset=1", nil, cookie, "", "")
+	if status != 200 || len(filtered["items"].([]any)) != 0 {
+		t.Fatal("audit offset applies to matching records", status, filtered)
+	}
+	status, filtered, _ = call("GET", "/v1/activity?action=key.&project_id="+id, nil, vc, "", "")
+	if status != 200 || len(filtered["items"].([]any)) != 2 {
+		t.Fatal("authorized member audit filters", status, filtered)
+	}
+	status, filtered, _ = call("GET", "/v1/activity?q=admin&action=auth.&project_id="+sec.ID(), nil, vc, "", "")
+	if status != 200 || len(filtered["items"].([]any)) != 0 {
+		t.Fatal("audit filters bypassed authorization", status, filtered)
 	}
 	status, _, _ = call("POST", "/v1/assets", map[string]any{}, cookie, csrf, "")
 	if status != 503 {

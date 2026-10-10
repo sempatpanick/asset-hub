@@ -476,7 +476,7 @@ func (s *Server) assets(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) activity(w http.ResponseWriter, r *http.Request) {
 	limit, offset := page(r)
-	v, err := s.service.Activity(r.Context(), current(r), limit, offset)
+	v, err := s.service.Activity(r.Context(), current(r), r.URL.Query().Get("q"), r.URL.Query().Get("action"), r.URL.Query().Get("project_id"), limit, offset)
 	if err != nil {
 		s.fail(w, r, err)
 		return

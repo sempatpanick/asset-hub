@@ -568,6 +568,24 @@ paths:
         [
           { $ref: "#/components/parameters/Limit" },
           { $ref: "#/components/parameters/Offset" },
+          {
+            in: query,
+            name: q,
+            schema: { type: string },
+            description: Case-insensitive search across authorized records,
+          },
+          {
+            in: query,
+            name: action,
+            schema: { type: string },
+            description: Audit action prefix,
+          },
+          {
+            in: query,
+            name: project_id,
+            schema: { type: string, format: uuid },
+            description: Restrict to an authorized project,
+          },
         ]
       responses:
         "200":
@@ -601,6 +619,24 @@ paths:
         [
           { $ref: "#/components/parameters/Limit" },
           { $ref: "#/components/parameters/Offset" },
+          {
+            in: query,
+            name: q,
+            schema: { type: string },
+            description: Case-insensitive search across authorized records,
+          },
+          {
+            in: query,
+            name: status,
+            schema: { type: string },
+            description: Effective asset or transfer status,
+          },
+          {
+            in: query,
+            name: project_id,
+            schema: { type: string, format: uuid },
+            description: Restrict to an authorized project,
+          },
         ]
       responses:
         "200":

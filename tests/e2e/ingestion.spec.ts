@@ -1,3 +1,4 @@
+import { selectOption } from "./select";
 import { test, expect } from "@playwright/test";
 test("multi-file upload persists through chunk verification and reload", async ({
   page,
@@ -42,7 +43,7 @@ test("multi-file upload persists through chunk verification and reload", async (
   await expect(page.getByRole("dialog")).not.toBeVisible();
   await page.getByRole("link", { name: "File Manager", exact: true }).click();
   await page.getByRole("button", { name: "Upload files", exact: true }).click();
-  await page.getByLabel("Upload project").selectOption({ label: project });
+  await selectOption(page, "Upload project", project);
   await page.locator('input[type="file"]').setInputFiles(files);
   await page.getByRole("button", { name: "Start / resume uploads" }).click();
   for (const file of files) {
@@ -117,11 +118,11 @@ test("multi-file upload persists through chunk verification and reload", async (
     .click();
   await expect(page.getByRole("dialog")).not.toBeVisible();
   expect((await page.request.get(signed)).status()).toBe(404);
-  await page.getByLabel("Status filter").selectOption("deleted");
+  await selectOption(page, "Status filter", "deleted");
   await page.getByRole("button", { name: renamed, exact: true }).click();
   await page.getByRole("button", { name: "Restore retained backup" }).click();
   await expect(page.getByRole("dialog")).not.toBeVisible();
-  await page.getByLabel("Status filter").selectOption("ready");
+  await selectOption(page, "Status filter", "ready");
   await expect(
     page.getByRole("button", { name: renamed, exact: true }),
   ).toBeVisible();

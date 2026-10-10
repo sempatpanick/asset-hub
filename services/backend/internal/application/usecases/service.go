@@ -239,11 +239,11 @@ func (s *Service) Assets(ctx context.Context, p domain.Principal, project, query
 	}
 	return s.repo.Assets(ctx, p, project, query, status, kind, limit, offset)
 }
-func (s *Service) Activity(ctx context.Context, p domain.Principal, limit, offset int) ([]domain.Activity, error) {
+func (s *Service) Activity(ctx context.Context, p domain.Principal, query, action, project string, limit, offset int) ([]domain.Activity, error) {
 	if p.KeyID != "" {
 		return nil, domain.ErrForbidden
 	}
-	return s.repo.Activity(ctx, p, limit, offset)
+	return s.repo.Activity(ctx, p, query, action, project, limit, offset)
 }
 func (s *Service) Health(ctx context.Context, p domain.Principal) ([]domain.Health, error) {
 	if !p.IsAdmin() {

@@ -1,10 +1,12 @@
 "use client";
+import { SearchSelect } from "./select";
 import { useEffect, useRef, useState } from "react";
 import { CloudUpload, Pause, Play, RefreshCw, X } from "lucide-react";
 import type { Asset, Items, Project, Upload } from "@assethub/api-client";
 import { mutate, request, uploadPart } from "@/infrastructure/api/client";
-import { bytes } from "@/features/hooks";
-import { Badge, Empty, ErrorNotice, Modal } from "./ui";
+import { bytes, useResource, useDebounced } from "@/features/hooks";
+import { Badge, Empty, ErrorNotice, Loading, Modal } from "./ui";
+import { Pagination, TableSearch } from "./table-controls";
 
 type Transfer = { file: File; status: string; loaded: number; error?: string };
 export function UploadDialog({
@@ -170,18 +172,18 @@ export function UploadDialog({
     >
       <label className="upload-project">
         Project
-        <select
+        <SearchSelect
           aria-label="Upload project"
           disabled={busy || transfers.length > 0}
           value={selected}
-          onChange={(e) => setSelected(e.target.value)}
+          onValueChange={setSelected}
         >
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
             </option>
           ))}
-        </select>
+        </SearchSelect>
       </label>
       <div
         className={`upload-drop ${dragging ? "dragging" : ""}`}
@@ -273,52 +275,31 @@ export function UploadDialog({
 export function UploadHistory({
   enabled,
   onUpload,
+  projects,
 }: {
   enabled: boolean;
   onUpload: () => void;
+  projects: Project[];
 }) {
-  const [items, setItems] = useState<Upload[]>([]);
+  const [search, setSearch] = useState("");
+  const query = useDebounced(search);
+  const [status, setStatus] = useState("");
+  const [project, setProject] = useState("");
+  const [offset, setOffset] = useState(0);
+  const [pageSize, setPageSize] = useState(50);
+  const history = useResource<Items<Upload>>(
+    `/uploads?q=${encodeURIComponent(query)}&status=${status}&project_id=${project}&offset=${offset}&limit=${pageSize}`,
+    3000,
+  );
+  const items = history.data?.items ?? [];
   const [error, setError] = useState("");
-  const refresh = async () => {
-    try {
-      const data = await request<Items<Upload>>("/uploads");
-      setItems(data.items);
-      setError("");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Unable to load uploads");
-    }
-  };
-  useEffect(() => {
-    let live = true;
-    const controller = new AbortController();
-    const load = async () => {
-      try {
-        const data = await request<Items<Upload>>("/uploads", {
-          signal: controller.signal,
-        });
-        if (live) {
-          setItems(data.items);
-          setError("");
-        }
-      } catch (e) {
-        if (live)
-          setError(e instanceof Error ? e.message : "Unable to load uploads");
-      }
-    };
-    void load();
-    const timer = setInterval(() => void load(), 3000);
-    return () => {
-      live = false;
-      controller.abort();
-      clearInterval(timer);
-    };
-  }, []);
   const action = async (u: Upload) => {
     try {
       if (u.asset_status === "failed")
         await mutate(`/assets/${u.asset_id}/retry`);
       else await mutate(`/uploads/${u.id}`, undefined, "DELETE");
-      await refresh();
+      setError("");
+      history.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Action failed");
     }
@@ -333,15 +314,75 @@ export function UploadHistory({
         <button
           className="icon-button"
           aria-label="Refresh uploads"
-          onClick={() => void refresh()}
+          onClick={history.refresh}
         >
           <RefreshCw size={17} />
         </button>
       </div>
-      <ErrorNotice message={error} />
-      {!items.length ? (
+      <div className="file-toolbar">
+        <TableSearch
+          label="Search uploads"
+          value={search}
+          onChange={(v) => {
+            setSearch(v);
+            setOffset(0);
+          }}
+        />
+        <div className="file-controls">
+          <SearchSelect
+            aria-label="Upload status filter"
+            value={status}
+            onValueChange={(v) => {
+              setStatus(v);
+              setOffset(0);
+            }}
+          >
+            <option value="">All statuses</option>
+            {[
+              "receiving",
+              "completing",
+              "queued",
+              "uploading",
+              "verifying",
+              "ready",
+              "failed",
+              "cancelled",
+              "expired",
+              "deleting",
+              "deleted",
+            ].map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </SearchSelect>
+          <SearchSelect
+            aria-label="Upload project filter"
+            value={project}
+            onValueChange={(v) => {
+              setProject(v);
+              setOffset(0);
+            }}
+          >
+            <option value="">All projects</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </SearchSelect>
+        </div>
+      </div>
+      <ErrorNotice message={error || history.error} />
+      {history.loading ? (
+        <Loading />
+      ) : !items.length ? (
         <Empty
-          title="Your files begin here"
+          title={
+            search || status || project || offset
+              ? "No matching uploads"
+              : "Your files begin here"
+          }
           detail={
             enabled
               ? "Upload to a project and follow each file as it becomes ready."
@@ -425,6 +466,16 @@ export function UploadHistory({
           </table>
         </div>
       )}
+      <Pagination
+        offset={offset}
+        count={items.length}
+        pageSize={pageSize}
+        onChange={setOffset}
+        onPageSizeChange={(n) => {
+          setPageSize(n);
+          setOffset(0);
+        }}
+      />
     </section>
   );
 }

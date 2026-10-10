@@ -87,11 +87,11 @@ func (i *Ingestion) Get(ctx context.Context, p domain.Principal, id, action stri
 	}
 	return u, nil
 }
-func (i *Ingestion) List(ctx context.Context, p domain.Principal, limit, offset int) ([]domain.Upload, error) {
+func (i *Ingestion) List(ctx context.Context, p domain.Principal, query, status, project string, limit, offset int) ([]domain.Upload, error) {
 	if p.KeyID != "" && !p.HasScope("assets:read") {
 		return nil, domain.ErrForbidden
 	}
-	return i.repo.Uploads(ctx, p, limit, offset)
+	return i.repo.Uploads(ctx, p, query, status, project, limit, offset)
 }
 func (i *Ingestion) PutPart(ctx context.Context, p domain.Principal, id string, index int, hash string, body io.Reader) error {
 	if !i.Enabled() {
