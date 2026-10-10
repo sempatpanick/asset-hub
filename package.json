@@ -12,7 +12,8 @@
     "lint": "eslint apps/web packages/api-client/src/index.ts tests/e2e playwright.config.ts eslint.config.mjs --max-warnings 0 tests/deploy",
     "test": "pnpm run test:e2e",
     "test:e2e": "playwright test",
-    "generate:api": "openapi-typescript api/openapi.yaml -o packages/api-client/src/schema.d.ts",
+    "generate:api": "openapi-typescript api/openapi.yaml -o packages/api-client/src/schema.d.ts && pnpm run generate:docs",
+    "generate:docs": "node scripts/generate-api-docs.mjs",
     "test:deploy": "node --test tests/deploy/*.test.mjs"
   },
   "devDependencies": {
@@ -20,6 +21,7 @@
     "@types/node": "26.6.5",
     "eslint": "9.39.5",
     "eslint-config-next": "16.4.0",
+    "js-yaml": "4.3.2",
     "openapi-typescript": "7.13.0",
     "prettier": "3.9.9",
     "typescript": "5.9.3"

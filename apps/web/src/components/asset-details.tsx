@@ -122,7 +122,9 @@ export function AssetDetails({
           <SearchSelect
             aria-label="Visibility"
             value={visibility}
-            onValueChange={(value) => setVisibility(value)}
+            onValueChange={(value) =>
+              setVisibility(value === "public" ? "public" : "private")
+            }
             disabled={!canManage || asset.status === "deleted"}
           >
             <option value="private">Private — project access required</option>

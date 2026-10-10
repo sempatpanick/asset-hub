@@ -13,6 +13,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Sign in
+         * @description Use your invited account email and password. Sets an HttpOnly session cookie for 12 hours and returns a CSRF token. Send Origin equal to this installation’s PUBLIC_ORIGIN. This is a dashboard session, not an API key.
+         */
         post: operations["login"];
         delete?: never;
         options?: never;
@@ -27,6 +31,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Get the current user
+         * @description Returns your session user and CSRF token. API keys cannot call this endpoint.
+         */
         get: operations["currentUser"];
         put?: never;
         post?: never;
@@ -45,6 +53,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Sign out
+         * @description Revokes the current session and clears its cookie. Requires the session CSRF token and matching Origin.
+         */
         post: operations["logout"];
         delete?: never;
         options?: never;
@@ -61,6 +73,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Accept an invitation
+         * @description Use the token from the invitation link’s #token fragment. Invitations expire after 48 hours and can be used once. Choose a 12–256 byte password. The account is created; call login next. Requires matching Origin.
+         */
         post: operations["acceptInvitation"];
         delete?: never;
         options?: never;
@@ -77,6 +93,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Invite a person
+         * @description Creates a one-time invitation URL. Share the URL with the intended person yourself; this endpoint does not send email. A workspace admin may invite an admin or member.
+         */
         post: operations["inviteUser"];
         delete?: never;
         options?: never;
@@ -91,8 +111,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * List your projects
+         * @description Returns all projects visible to the caller. An application key sees only its own project with role application. This list is not paginated.
+         */
         get: operations["listProjects"];
         put?: never;
+        /**
+         * Create a project
+         * @description Any signed-in user can create a project and becomes its manager. Set a quota in bytes, at least 1 MiB (1048576). Quota accounts for stored files and reserved uploads. API keys cannot create projects.
+         */
         post: operations["createProject"];
         delete?: never;
         options?: never;
@@ -105,7 +133,11 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                id: components["parameters"]["ID"];
+                /**
+                 * @description The project id copied from a create or list response.
+                 * @example 11111111-1111-4111-8111-111111111111
+                 */
+                id: string;
             };
             cookie?: never;
         };
@@ -115,6 +147,10 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
+        /**
+         * Update a project
+         * @description Send name, description and quota_bytes together; omitted fields are not preserved. Only a project manager can update it. Quota cannot be reduced below stored and reserved usage.
+         */
         patch: operations["updateProject"];
         trace?: never;
     };
@@ -123,12 +159,24 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                id: components["parameters"]["ID"];
+                /**
+                 * @description The project id copied from a create or list response.
+                 * @example 11111111-1111-4111-8111-111111111111
+                 */
+                id: string;
             };
             cookie?: never;
         };
+        /**
+         * List project members
+         * @description Any session user who can read the project may see its members. API keys cannot list people. This list is not paginated.
+         */
         get: operations["listMembers"];
         put?: never;
+        /**
+         * Add or update a member
+         * @description The person must already have an account; invite them first if needed. Sets manager, editor or viewer access to this project. Cannot remove the last manager.
+         */
         post: operations["setMember"];
         delete?: never;
         options?: never;
@@ -143,8 +191,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * List project API keys
+         * @description Requires project_id. Lists metadata, expiry and revocation, without revealing secrets. This list is not paginated.
+         */
         get: operations["listKeys"];
         put?: never;
+        /**
+         * Create a project API key
+         * @description Choose 1–4 distinct scopes. expires_at may be a future RFC3339 timestamp or null. Copy the secret now: it is returned only once and cannot be recovered. Keep it in your other project’s server environment.
+         */
         post: operations["createKey"];
         delete?: never;
         options?: never;
@@ -155,17 +211,29 @@ export interface paths {
     "/api-keys/{id}": {
         parameters: {
             query: {
+                /**
+                 * @description The project id whose API keys you want to list or revoke. Required even when the key id is supplied in the path.
+                 * @example 11111111-1111-4111-8111-111111111111
+                 */
                 project_id: components["parameters"]["ProjectID"];
             };
             header?: never;
             path: {
-                id: components["parameters"]["ID"];
+                /**
+                 * @description The key id copied from a create or list response.
+                 * @example 44444444-4444-4444-8444-444444444444
+                 */
+                id: string;
             };
             cookie?: never;
         };
         get?: never;
         put?: never;
         post?: never;
+        /**
+         * Revoke an API key
+         * @description Requires the key id in the path and its project_id in the query. Revocation takes effect on subsequent requests. Create a new key to replace it.
+         */
         delete: operations["revokeKey"];
         options?: never;
         head?: never;
@@ -179,8 +247,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Search and list files
+         * @description Returns authorized file metadata. q searches names without case sensitivity. type accepts image/, video/, audio/, text/ or application/. status filters stored asset state; workspace admins can use deleted to find retained deleted records. Use limit and offset to fetch further pages.
+         */
         get: operations["listAssets"];
         put?: never;
+        /**
+         * Upload a small file
+         * @description Send multipart/form-data with exactly project_id and file. File must contain 1 byte to 8 MiB. Let your HTTP library set the multipart boundary. Returns 202 after durable queueing; wait for ready before downloading. For larger files, use resumable uploads.
+         */
         post: operations["uploadSmallAsset"];
         delete?: never;
         options?: never;
@@ -193,16 +269,32 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
+                /**
+                 * @description The file id copied from a create or list response.
+                 * @example 22222222-2222-4222-8222-222222222222
+                 */
                 id: string;
             };
             cookie?: never;
         };
+        /**
+         * Get file details and progress
+         * @description Returns metadata plus error_code, attempts and uploaded_chunks. Poll every few seconds until ready or failed. Deleted and deleting files return 404. uploaded_chunks counts storage chunks, not upload parts.
+         */
         get: operations["assetMetadata"];
         put?: never;
         post?: never;
+        /**
+         * Delete a file
+         * @description Revokes content immediately and schedules best-effort storage deletion. Repeating deletion of the same deleted record is accepted. If backups are enabled, encrypted backup is retained for 30 days; otherwise there is no restore. Keep the asset id for restoration.
+         */
         delete: operations["deleteAsset"];
         options?: never;
         head?: never;
+        /**
+         * Rename a file or change visibility
+         * @description Provide name, visibility or both. Editors and assets:write keys can rename. Only a session project manager may change private/public visibility. A successful update revokes previously issued signed URLs. Public files can be downloaded without credentials.
+         */
         patch: operations["updateAsset"];
         trace?: never;
     };
@@ -211,12 +303,20 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
+                /**
+                 * @description The file id copied from a create or list response.
+                 * @example 22222222-2222-4222-8222-222222222222
+                 */
                 id: string;
             };
             cookie?: never;
         };
         get?: never;
         put?: never;
+        /**
+         * Restore a deleted file
+         * @description Workspace admin only. Requires enabled backups, a deleted file and a verified retained backup within 30 days. Reserves project quota, restores ready content and gives it a new version; old signed links remain invalid. Without backups returns 503.
+         */
         post: operations["restoreAsset"];
         delete?: never;
         options?: never;
@@ -236,15 +336,27 @@ export interface paths {
                 Range?: string;
             };
             path: {
+                /**
+                 * @description The file id copied from a create or list response.
+                 * @example 22222222-2222-4222-8222-222222222222
+                 */
                 id: string;
             };
             cookie?: never;
         };
+        /**
+         * Download file content
+         * @description Returns actual bytes for a ready file. Private content requires a reading session/key or valid signed token; public content allows anonymous access. download=1 forces attachment. A single byte Range gives 206; multiple ranges fall back to full content. Invalid ranges return 416. Files still processing or deleted return 404.
+         */
         get: operations["getContent"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
+        /**
+         * Inspect content headers
+         * @description Same authorization as GET content, without downloading bytes. Returns Content-Type, Content-Length, Content-Disposition, Accept-Ranges and ETag. Range can give 206 headers. HEAD responses have no body, including errors.
+         */
         head: operations["headContent"];
         patch?: never;
         trace?: never;
@@ -254,12 +366,20 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
+                /**
+                 * @description The file id copied from a create or list response.
+                 * @example 22222222-2222-4222-8222-222222222222
+                 */
                 id: string;
             };
             cookie?: never;
         };
         get?: never;
         put?: never;
+        /**
+         * Create a temporary download link
+         * @description File must be ready. expires_in is seconds: omitted or 0 means 900; otherwise use 1–86400. Anyone holding the returned URL can read that file until expiry. A rename, visibility change, delete or restore invalidates existing links. It grants content access only, not metadata or administration.
+         */
         post: operations["signContent"];
         delete?: never;
         options?: never;
@@ -272,12 +392,20 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
+                /**
+                 * @description The file id copied from a create or list response.
+                 * @example 22222222-2222-4222-8222-222222222222
+                 */
                 id: string;
             };
             cookie?: never;
         };
         get?: never;
         put?: never;
+        /**
+         * Retry failed file processing
+         * @description Requeues a failed asset if its required staging data remains available. Returns 409 for an incompatible state. This does not upload new bytes; use a new upload if source data has been cleaned up.
+         */
         post: operations["retryAsset"];
         delete?: never;
         options?: never;
@@ -292,6 +420,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Get workspace totals
+         * @description Returns totals, recent files and daily activity for projects visible to the session user. API keys cannot access the workspace overview.
+         */
         get: operations["overview"];
         put?: never;
         post?: never;
@@ -308,6 +440,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Search activity logs
+         * @description Returns authorized audit events, newest first. q searches without case sensitivity; action is a prefix such as asset. or project.; project_id restricts the project. API keys cannot read audit logs.
+         */
         get: operations["activity"];
         put?: never;
         post?: never;
@@ -324,8 +460,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Search uploads and processing jobs
+         * @description Returns resumable transfers and related asset progress. status matches the effective asset state when a file exists, otherwise the transfer state. q searches file names without case sensitivity. Paginated with limit and offset.
+         */
         get: operations["listUploads"];
         put?: never;
+        /**
+         * Start a resumable upload
+         * @description Reserves capacity for a 1 byte–512 MiB file. Name is a safe filename, up to 180 characters. Optional sha256 is a lowercase 64-character full-file checksum. Session expires after 24 hours. Use the returned part_bytes to split the file; it is currently 8 MiB.
+         */
         post: operations["createUpload"];
         delete?: never;
         options?: never;
@@ -338,13 +482,25 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
+                /**
+                 * @description The upload id copied from a create or list response.
+                 * @example 33333333-3333-4333-8333-333333333333
+                 */
                 id: string;
             };
             cookie?: never;
         };
+        /**
+         * Inspect or resume an upload
+         * @description Returns received parts with zero-based index, exact size and checksum. To resume, compare these against your source file and send only missing parts. Requires assets:read for application keys; a write-only key can upload but cannot inspect.
+         */
         get: operations["getUpload"];
         put?: never;
         post?: never;
+        /**
+         * Cancel an unfinished upload
+         * @description Cancels an unfinished receiving transfer, releases reserved capacity and schedules staging cleanup. A queued/completed transfer cannot be cancelled; delete its resulting asset instead.
+         */
         delete: operations["cancelUpload"];
         options?: never;
         head?: never;
@@ -356,12 +512,24 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
+                /**
+                 * @description The upload id copied from a create or list response.
+                 * @example 33333333-3333-4333-8333-333333333333
+                 */
                 id: string;
+                /**
+                 * @description Zero-based part number. Part 0 is the first part of the file.
+                 * @example 0
+                 */
                 index: number;
             };
             cookie?: never;
         };
         get?: never;
+        /**
+         * Send one upload part
+         * @description PUT raw bytes, not JSON or multipart. index starts at 0. Every part is exactly part_bytes except the last part, which has the remaining bytes. Set X-Content-SHA256 to the lowercase SHA-256 of these exact bytes. Identical retries succeed; replacing a part with a different checksum returns 409. Wrong length/checksum returns 422.
+         */
         put: operations["uploadPart"];
         post?: never;
         delete?: never;
@@ -375,12 +543,20 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
+                /**
+                 * @description The upload id copied from a create or list response.
+                 * @example 33333333-3333-4333-8333-333333333333
+                 */
                 id: string;
             };
             cookie?: never;
         };
         get?: never;
         put?: never;
+        /**
+         * Finish and queue an upload
+         * @description Call after all parts are present. Verifies total length and checksums and queues durable processing. Missing parts return 409; integrity mismatch returns 422. Completion is idempotent: retrying returns the same asset. 202 means accepted, not yet ready for download.
+         */
         post: operations["completeUpload"];
         delete?: never;
         options?: never;
@@ -395,6 +571,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Check storage dependencies
+         * @description Admin-only status for configured dependencies and durable processing jobs. A 200 response can contain unhealthy components; inspect each item’s status and detail.
+         */
         get: operations["storageHealth"];
         put?: never;
         post?: never;
@@ -411,7 +591,51 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Read effective settings
+         * @description Read-only, non-secret runtime settings. Check features.uploads, content and backups before using those capabilities. With backups disabled, backup_retention_days is 0 and restore is unavailable. API keys cannot call this endpoint.
+         */
         get: operations["settings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/healthz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Check server liveness
+         * @description Confirms the HTTP process is alive. Does not verify storage dependencies. This path is outside /v1.
+         */
+        get: operations["liveness"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/readyz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Check server readiness
+         * @description Checks required dependencies with a 3-second timeout. Returns 503 when unavailable. This path is outside /v1.
+         */
+        get: operations["readiness"];
         put?: never;
         post?: never;
         delete?: never;
@@ -424,6 +648,14 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @example {
+         *       "id": "55555555-5555-4555-8555-555555555555",
+         *       "email": "you@example.com",
+         *       "name": "Alex Morgan",
+         *       "role": "member"
+         *     }
+         */
         User: {
             id: string;
             email: string;
@@ -431,10 +663,33 @@ export interface components {
             /** @enum {string} */
             role: "admin" | "member";
         };
+        /**
+         * @example {
+         *       "user": {
+         *         "id": "55555555-5555-4555-8555-555555555555",
+         *         "email": "you@example.com",
+         *         "name": "Alex Morgan",
+         *         "role": "member"
+         *       },
+         *       "csrf_token": "example-only-use-the-token-returned-by-your-session"
+         *     }
+         */
         Auth: {
             user: components["schemas"]["User"];
             csrf_token: string;
         };
+        /**
+         * @example {
+         *       "id": "11111111-1111-4111-8111-111111111111",
+         *       "name": "Website assets",
+         *       "description": "Images and documents for our website",
+         *       "role": "manager",
+         *       "quota_bytes": 1073741824,
+         *       "used_bytes": 12,
+         *       "files": 1,
+         *       "created_at": "2026-10-10T08:00:00Z"
+         *     }
+         */
         Project: {
             id: string;
             name: string;
@@ -447,6 +702,19 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
+        /**
+         * @example {
+         *       "id": "22222222-2222-4222-8222-222222222222",
+         *       "project_id": "11111111-1111-4111-8111-111111111111",
+         *       "name": "hello.txt",
+         *       "mime": "text/plain; charset=utf-8",
+         *       "size_bytes": 12,
+         *       "sha256": "a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447",
+         *       "status": "ready",
+         *       "visibility": "private",
+         *       "created_at": "2026-10-10T08:00:00Z"
+         *     }
+         */
         Asset: {
             id: string;
             project_id: string;
@@ -454,19 +722,40 @@ export interface components {
             mime: string;
             size_bytes: number;
             sha256: string;
+            /** @description queued → uploading → verifying → ready, or failed; deleted/deleting files cannot be downloaded. */
             status: string;
-            visibility: string;
+            /** @enum {string} */
+            visibility: "private" | "public";
             /** Format: date-time */
             created_at: string;
         };
+        /**
+         * @example {
+         *       "id": "33333333-3333-4333-8333-333333333333",
+         *       "project_id": "11111111-1111-4111-8111-111111111111",
+         *       "name": "hello.txt",
+         *       "size_bytes": 12,
+         *       "status": "receiving",
+         *       "asset_id": "",
+         *       "part_bytes": 8388608,
+         *       "parts": [],
+         *       "expires_at": "2026-10-11T08:00:00Z",
+         *       "created_at": "2026-10-10T08:00:00Z",
+         *       "asset_status": "",
+         *       "error_code": "",
+         *       "uploaded_chunks": 0
+         *     }
+         */
         Upload: {
             id: string;
             project_id: string;
             name: string;
             size_bytes: number;
+            /** @description Transfer state: receiving, completing, queued, complete, cancelled or expired. Read asset_status for file processing state. */
             status: string;
             asset_id: string;
             asset_status: string;
+            /** @description Empty when no processing error is recorded; otherwise a worker error code. */
             error_code: string;
             uploaded_chunks: number;
             part_bytes: number;
@@ -480,6 +769,21 @@ export interface components {
                 sha256: string;
             }[];
         };
+        /**
+         * @example {
+         *       "id": "44444444-4444-4444-8444-444444444444",
+         *       "project_id": "11111111-1111-4111-8111-111111111111",
+         *       "name": "Website server",
+         *       "prefix": "ah_example0",
+         *       "scopes": [
+         *         "assets:read",
+         *         "assets:write"
+         *       ],
+         *       "expires_at": null,
+         *       "revoked_at": null,
+         *       "created_at": "2026-10-10T08:00:00Z"
+         *     }
+         */
         ApiKey: {
             id: string;
             project_id: string;
@@ -569,17 +873,33 @@ export interface components {
     parameters: {
         /** @description Required for session-authenticated mutations; Origin must match PUBLIC_ORIGIN. */
         CSRF: string;
+        /** @example 11111111-1111-4111-8111-111111111111 */
         ID: string;
+        /**
+         * @description The project id whose API keys you want to list or revoke. Required even when the key id is supplied in the path.
+         * @example 11111111-1111-4111-8111-111111111111
+         */
         ProjectID: string;
+        /** @description Page size, 1–100. Missing or invalid values become 50. */
         Limit: number;
+        /** @description Rows to skip, 0–100000. Missing or invalid values become 0. */
         Offset: number;
     };
     requestBodies: {
         Project: {
             content: {
+                /**
+                 * @example {
+                 *       "name": "Website assets",
+                 *       "description": "Images and documents for our website",
+                 *       "quota_bytes": 1073741824
+                 *     }
+                 */
                 "application/json": {
                     name: string;
+                    /** @description Project description, up to 2000 UTF-8 bytes. */
                     description: string;
+                    /** @description Storage quota in integer bytes, including stored files and reserved uploads. Minimum 1048576 (1 MiB). */
                     quota_bytes: number;
                 };
             };
@@ -601,6 +921,12 @@ export interface operations {
         };
         requestBody: {
             content: {
+                /**
+                 * @example {
+                 *       "email": "you@example.com",
+                 *       "password": "your-account-password"
+                 *     }
+                 */
                 "application/json": {
                     /** Format: email */
                     email: string;
@@ -615,10 +941,144 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "user": {
+                     *         "id": "55555555-5555-4555-8555-555555555555",
+                     *         "email": "you@example.com",
+                     *         "name": "Alex Morgan",
+                     *         "role": "member"
+                     *       },
+                     *       "csrf_token": "example-only-use-the-token-returned-by-your-session"
+                     *     }
+                     */
                     "application/json": components["schemas"]["Auth"];
                 };
             };
-            401: components["responses"]["Error"];
+            /** @description Check the supplied fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "invalid_input",
+                     *         "message": "Check the supplied fields",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Try again shortly */
+            429: {
+                headers: {
+                    /**
+                     * @description Wait this many seconds before retrying.
+                     * @example 60
+                     */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "rate_limited",
+                     *         "message": "Try again in one minute"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
         };
     };
     currentUser: {
@@ -636,18 +1096,105 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "user": {
+                     *         "id": "55555555-5555-4555-8555-555555555555",
+                     *         "email": "you@example.com",
+                     *         "name": "Alex Morgan",
+                     *         "role": "member"
+                     *       },
+                     *       "csrf_token": "example-only-use-the-token-returned-by-your-session"
+                     *     }
+                     */
                     "application/json": components["schemas"]["Auth"];
                 };
             };
-            401: components["responses"]["Error"];
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
         };
     };
     logout: {
         parameters: {
             query?: never;
-            header?: {
+            header: {
                 /** @description Required for session-authenticated mutations; Origin must match PUBLIC_ORIGIN. */
-                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "X-CSRF-Token": string;
+                /**
+                 * @description Must match PUBLIC_ORIGIN for login, invitation acceptance and all session mutations. API-key mutations do not require it.
+                 * @example https://assets.example.com
+                 */
+                Origin: string;
             };
             path?: never;
             cookie?: never;
@@ -659,20 +1206,113 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    /**
+                     * @example {
+                     *       "ok": true
+                     *     }
+                     */
+                    "application/json": {
+                        ok: boolean;
+                    };
+                };
             };
-            403: components["responses"]["Error"];
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
         };
     };
     acceptInvitation: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /**
+                 * @description Must match PUBLIC_ORIGIN for login, invitation acceptance and all session mutations. API-key mutations do not require it.
+                 * @example https://assets.example.com
+                 */
+                Origin: string;
+            };
             path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
+                /**
+                 * @example {
+                 *       "token": "replace-with-invitation-token",
+                 *       "name": "Alex Morgan",
+                 *       "password": "choose-a-long-unique-password"
+                 *     }
+                 */
                 "application/json": {
                     token: string;
                     name: string;
@@ -686,23 +1326,166 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    /**
+                     * @example {
+                     *       "ok": true
+                     *     }
+                     */
+                    "application/json": {
+                        ok: boolean;
+                    };
+                };
             };
-            409: components["responses"]["Error"];
+            /** @description Check the supplied fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "invalid_input",
+                     *         "message": "Check the supplied fields",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Resource exists, has expired, or violates a constraint */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "conflict",
+                     *         "message": "Resource exists, has expired, or violates a constraint",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Try again shortly */
+            429: {
+                headers: {
+                    /**
+                     * @description Wait this many seconds before retrying.
+                     * @example 60
+                     */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "rate_limited",
+                     *         "message": "Try again in one minute"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
         };
     };
     inviteUser: {
         parameters: {
             query?: never;
-            header?: {
+            header: {
                 /** @description Required for session-authenticated mutations; Origin must match PUBLIC_ORIGIN. */
-                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "X-CSRF-Token": string;
+                /**
+                 * @description Must match PUBLIC_ORIGIN for login, invitation acceptance and all session mutations. API-key mutations do not require it.
+                 * @example https://assets.example.com
+                 */
+                Origin: string;
             };
             path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
+                /**
+                 * @example {
+                 *       "email": "colleague@example.com",
+                 *       "role": "member"
+                 *     }
+                 */
                 "application/json": {
                     /** Format: email */
                     email: string;
@@ -718,13 +1501,138 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "url": "https://assets.example.com/invite/#token=example-invitation-token",
+                     *       "expires_in": "48 hours"
+                     *     }
+                     */
                     "application/json": {
                         url: string;
                         expires_in: string;
                     };
                 };
             };
-            403: components["responses"]["Error"];
+            /** @description Check the supplied fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "invalid_input",
+                     *         "message": "Check the supplied fields",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Resource exists, has expired, or violates a constraint */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "conflict",
+                     *         "message": "Resource exists, has expired, or violates a constraint",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
         };
     };
     listProjects: {
@@ -742,8 +1650,96 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "id": "11111111-1111-4111-8111-111111111111",
+                     *           "name": "Website assets",
+                     *           "description": "Images and documents for our website",
+                     *           "role": "manager",
+                     *           "quota_bytes": 1073741824,
+                     *           "used_bytes": 12,
+                     *           "files": 1,
+                     *           "created_at": "2026-10-10T08:00:00Z"
+                     *         }
+                     *       ]
+                     *     }
+                     */
                     "application/json": {
                         items: components["schemas"]["Project"][];
+                    };
+                };
+            };
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
                     };
                 };
             };
@@ -752,9 +1748,14 @@ export interface operations {
     createProject: {
         parameters: {
             query?: never;
-            header?: {
+            header: {
                 /** @description Required for session-authenticated mutations; Origin must match PUBLIC_ORIGIN. */
-                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "X-CSRF-Token": string;
+                /**
+                 * @description Must match PUBLIC_ORIGIN for login, invitation acceptance and all session mutations. API-key mutations do not require it.
+                 * @example https://assets.example.com
+                 */
+                Origin: string;
             };
             path?: never;
             cookie?: never;
@@ -767,21 +1768,161 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "id": "11111111-1111-4111-8111-111111111111",
+                     *       "name": "Website assets",
+                     *       "description": "Images and documents for our website",
+                     *       "role": "manager",
+                     *       "quota_bytes": 1073741824,
+                     *       "used_bytes": 12,
+                     *       "files": 1,
+                     *       "created_at": "2026-10-10T08:00:00Z"
+                     *     }
+                     */
                     "application/json": components["schemas"]["Project"];
                 };
             };
-            400: components["responses"]["Error"];
+            /** @description Check the supplied fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "invalid_input",
+                     *         "message": "Check the supplied fields",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Resource exists, has expired, or violates a constraint */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "conflict",
+                     *         "message": "Resource exists, has expired, or violates a constraint",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
         };
     };
     updateProject: {
         parameters: {
             query?: never;
-            header?: {
+            header: {
                 /** @description Required for session-authenticated mutations; Origin must match PUBLIC_ORIGIN. */
-                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "X-CSRF-Token": string;
+                /**
+                 * @description Must match PUBLIC_ORIGIN for login, invitation acceptance and all session mutations. API-key mutations do not require it.
+                 * @example https://assets.example.com
+                 */
+                Origin: string;
             };
             path: {
-                id: components["parameters"]["ID"];
+                /**
+                 * @description The project id copied from a create or list response.
+                 * @example 11111111-1111-4111-8111-111111111111
+                 */
+                id: string;
             };
             cookie?: never;
         };
@@ -792,9 +1933,161 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    /**
+                     * @example {
+                     *       "ok": true
+                     *     }
+                     */
+                    "application/json": {
+                        ok: boolean;
+                    };
+                };
             };
-            403: components["responses"]["Error"];
+            /** @description Check the supplied fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "invalid_input",
+                     *         "message": "Check the supplied fields",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "not_found",
+                     *         "message": "Resource not found",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Resource exists, has expired, or violates a constraint */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "conflict",
+                     *         "message": "Resource exists, has expired, or violates a constraint",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
         };
     };
     listMembers: {
@@ -802,7 +2095,11 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                id: components["parameters"]["ID"];
+                /**
+                 * @description The project id copied from a create or list response.
+                 * @example 11111111-1111-4111-8111-111111111111
+                 */
+                id: string;
             };
             cookie?: never;
         };
@@ -814,8 +2111,116 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "user_id": "55555555-5555-4555-8555-555555555555",
+                     *           "email": "you@example.com",
+                     *           "name": "Alex Morgan",
+                     *           "role": "editor"
+                     *         }
+                     *       ]
+                     *     }
+                     */
                     "application/json": {
                         items: components["schemas"]["Member"][];
+                    };
+                };
+            };
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "not_found",
+                     *         "message": "Resource not found",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
                     };
                 };
             };
@@ -824,17 +2229,32 @@ export interface operations {
     setMember: {
         parameters: {
             query?: never;
-            header?: {
+            header: {
                 /** @description Required for session-authenticated mutations; Origin must match PUBLIC_ORIGIN. */
-                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "X-CSRF-Token": string;
+                /**
+                 * @description Must match PUBLIC_ORIGIN for login, invitation acceptance and all session mutations. API-key mutations do not require it.
+                 * @example https://assets.example.com
+                 */
+                Origin: string;
             };
             path: {
-                id: components["parameters"]["ID"];
+                /**
+                 * @description The project id copied from a create or list response.
+                 * @example 11111111-1111-4111-8111-111111111111
+                 */
+                id: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
+                /**
+                 * @example {
+                 *       "email": "colleague@example.com",
+                 *       "role": "editor"
+                 *     }
+                 */
                 "application/json": {
                     /** Format: email */
                     email: string;
@@ -849,14 +2269,170 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    /**
+                     * @example {
+                     *       "ok": true
+                     *     }
+                     */
+                    "application/json": {
+                        ok: boolean;
+                    };
+                };
             };
-            409: components["responses"]["Error"];
+            /** @description Check the supplied fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "invalid_input",
+                     *         "message": "Check the supplied fields",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "not_found",
+                     *         "message": "Resource not found",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Resource exists, has expired, or violates a constraint */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "conflict",
+                     *         "message": "Resource exists, has expired, or violates a constraint",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
         };
     };
     listKeys: {
         parameters: {
             query: {
+                /**
+                 * @description The project id whose API keys you want to list or revoke. Required even when the key id is supplied in the path.
+                 * @example 11111111-1111-4111-8111-111111111111
+                 */
                 project_id: components["parameters"]["ProjectID"];
             };
             header?: never;
@@ -871,8 +2447,99 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "id": "44444444-4444-4444-8444-444444444444",
+                     *           "project_id": "11111111-1111-4111-8111-111111111111",
+                     *           "name": "Website server",
+                     *           "prefix": "ah_example0",
+                     *           "scopes": [
+                     *             "assets:read",
+                     *             "assets:write"
+                     *           ],
+                     *           "expires_at": null,
+                     *           "revoked_at": null,
+                     *           "created_at": "2026-10-10T08:00:00Z"
+                     *         }
+                     *       ]
+                     *     }
+                     */
                     "application/json": {
                         items: components["schemas"]["ApiKey"][];
+                    };
+                };
+            };
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
                     };
                 };
             };
@@ -881,15 +2548,31 @@ export interface operations {
     createKey: {
         parameters: {
             query?: never;
-            header?: {
+            header: {
                 /** @description Required for session-authenticated mutations; Origin must match PUBLIC_ORIGIN. */
-                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "X-CSRF-Token": string;
+                /**
+                 * @description Must match PUBLIC_ORIGIN for login, invitation acceptance and all session mutations. API-key mutations do not require it.
+                 * @example https://assets.example.com
+                 */
+                Origin: string;
             };
             path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
+                /**
+                 * @example {
+                 *       "project_id": "11111111-1111-4111-8111-111111111111",
+                 *       "name": "Website server",
+                 *       "scopes": [
+                 *         "assets:read",
+                 *         "assets:write"
+                 *       ],
+                 *       "expires_at": null
+                 *     }
+                 */
                 "application/json": {
                     /** Format: uuid */
                     project_id: string;
@@ -907,9 +2590,147 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "key": {
+                     *         "id": "44444444-4444-4444-8444-444444444444",
+                     *         "project_id": "11111111-1111-4111-8111-111111111111",
+                     *         "name": "Website server",
+                     *         "prefix": "ah_example0",
+                     *         "scopes": [
+                     *           "assets:read",
+                     *           "assets:write"
+                     *         ],
+                     *         "expires_at": null,
+                     *         "revoked_at": null,
+                     *         "created_at": "2026-10-10T08:00:00Z"
+                     *       },
+                     *       "secret": "ah_example-only-not-a-working-key"
+                     *     }
+                     */
                     "application/json": {
                         key: components["schemas"]["ApiKey"];
                         secret: string;
+                    };
+                };
+            };
+            /** @description Check the supplied fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "invalid_input",
+                     *         "message": "Check the supplied fields",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Resource exists, has expired, or violates a constraint */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "conflict",
+                     *         "message": "Resource exists, has expired, or violates a constraint",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
                     };
                 };
             };
@@ -918,14 +2739,27 @@ export interface operations {
     revokeKey: {
         parameters: {
             query: {
+                /**
+                 * @description The project id whose API keys you want to list or revoke. Required even when the key id is supplied in the path.
+                 * @example 11111111-1111-4111-8111-111111111111
+                 */
                 project_id: components["parameters"]["ProjectID"];
             };
-            header?: {
+            header: {
                 /** @description Required for session-authenticated mutations; Origin must match PUBLIC_ORIGIN. */
-                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "X-CSRF-Token": string;
+                /**
+                 * @description Must match PUBLIC_ORIGIN for login, invitation acceptance and all session mutations. API-key mutations do not require it.
+                 * @example https://assets.example.com
+                 */
+                Origin: string;
             };
             path: {
-                id: components["parameters"]["ID"];
+                /**
+                 * @description The key id copied from a create or list response.
+                 * @example 44444444-4444-4444-8444-444444444444
+                 */
+                id: string;
             };
             cookie?: never;
         };
@@ -936,19 +2770,129 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    /**
+                     * @example {
+                     *       "ok": true
+                     *     }
+                     */
+                    "application/json": {
+                        ok: boolean;
+                    };
+                };
             };
-            404: components["responses"]["Error"];
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "not_found",
+                     *         "message": "Resource not found",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
         };
     };
     listAssets: {
         parameters: {
             query?: {
+                /** @description Limit results to this project id. Omit it to include all projects you can access; a project key remains limited to its own project. */
                 project_id?: string;
+                /** @description Optional case-insensitive search of file names. Omit it to return all authorized results. */
                 q?: string;
+                /** @description Optional asset state: queued, uploading, verifying, ready or failed. Only workspace admins can list deleted assets. */
                 status?: string;
-                type?: string;
+                /** @description MIME category prefix, including its trailing slash. Omit it to include all file types. */
+                type?: "image/" | "video/" | "audio/" | "text/" | "application/";
+                /** @description Page size, 1–100. Missing or invalid values become 50. */
                 limit?: components["parameters"]["Limit"];
+                /** @description Rows to skip, 0–100000. Missing or invalid values become 0. */
                 offset?: components["parameters"]["Offset"];
             };
             header?: never;
@@ -963,10 +2907,149 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "id": "22222222-2222-4222-8222-222222222222",
+                     *           "project_id": "11111111-1111-4111-8111-111111111111",
+                     *           "name": "hello.txt",
+                     *           "mime": "text/plain; charset=utf-8",
+                     *           "size_bytes": 12,
+                     *           "sha256": "a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447",
+                     *           "status": "ready",
+                     *           "visibility": "private",
+                     *           "created_at": "2026-10-10T08:00:00Z"
+                     *         }
+                     *       ],
+                     *       "limit": 50,
+                     *       "offset": 0
+                     *     }
+                     */
                     "application/json": {
                         items: components["schemas"]["Asset"][];
                         limit: number;
                         offset: number;
+                    };
+                };
+            };
+            /** @description Check the supplied fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "invalid_input",
+                     *         "message": "Check the supplied fields",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Required storage, backup or signing configuration is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "storage_unavailable",
+                     *         "message": "Required storage, backup or signing configuration is unavailable",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
                     };
                 };
             };
@@ -978,12 +3061,23 @@ export interface operations {
             header?: {
                 /** @description Required for session-authenticated mutations; Origin must match PUBLIC_ORIGIN. */
                 "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                /**
+                 * @description Must match PUBLIC_ORIGIN for login, invitation acceptance and all session mutations. API-key mutations do not require it.
+                 * @example https://assets.example.com
+                 */
+                Origin?: string;
             };
             path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
+                /**
+                 * @example {
+                 *       "project_id": "11111111-1111-4111-8111-111111111111",
+                 *       "file": "hello.txt"
+                 *     }
+                 */
                 "multipart/form-data": {
                     /** Format: uuid */
                     project_id: string;
@@ -1002,11 +3096,194 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "id": "22222222-2222-4222-8222-222222222222",
+                     *       "project_id": "11111111-1111-4111-8111-111111111111",
+                     *       "name": "hello.txt",
+                     *       "mime": "text/plain; charset=utf-8",
+                     *       "size_bytes": 12,
+                     *       "sha256": "a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447",
+                     *       "status": "queued",
+                     *       "visibility": "private",
+                     *       "created_at": "2026-10-10T08:00:00Z"
+                     *     }
+                     */
                     "application/json": components["schemas"]["Asset"];
                 };
             };
-            413: components["responses"]["Error"];
-            503: components["responses"]["Error"];
+            /** @description Check the supplied fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "invalid_input",
+                     *         "message": "Check the supplied fields",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Project quota, staging capacity or disk reserve exceeded */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "capacity_exceeded",
+                     *         "message": "Project quota, staging capacity or disk reserve exceeded",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Try again shortly */
+            429: {
+                headers: {
+                    /**
+                     * @description Wait this many seconds before retrying.
+                     * @example 2
+                     */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "busy",
+                     *         "message": "Upload transfers are busy; retry shortly"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Required storage, backup or signing configuration is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "storage_unavailable",
+                     *         "message": "Required storage, backup or signing configuration is unavailable",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
         };
     };
     assetMetadata: {
@@ -1014,6 +3291,10 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /**
+                 * @description The file id copied from a create or list response.
+                 * @example 22222222-2222-4222-8222-222222222222
+                 */
                 id: string;
             };
             cookie?: never;
@@ -1026,10 +3307,149 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Asset"];
+                    /**
+                     * @example {
+                     *       "id": "22222222-2222-4222-8222-222222222222",
+                     *       "project_id": "11111111-1111-4111-8111-111111111111",
+                     *       "name": "hello.txt",
+                     *       "mime": "text/plain; charset=utf-8",
+                     *       "size_bytes": 12,
+                     *       "sha256": "a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447",
+                     *       "status": "ready",
+                     *       "visibility": "private",
+                     *       "created_at": "2026-10-10T08:00:00Z",
+                     *       "error_code": "",
+                     *       "attempts": 1,
+                     *       "uploaded_chunks": 1
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Asset"] & {
+                        error_code: string;
+                        attempts: number;
+                        uploaded_chunks: number;
+                    };
                 };
             };
-            404: components["responses"]["Error"];
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "not_found",
+                     *         "message": "Resource not found",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Required storage, backup or signing configuration is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "storage_unavailable",
+                     *         "message": "Required storage, backup or signing configuration is unavailable",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
         };
     };
     deleteAsset: {
@@ -1038,8 +3458,17 @@ export interface operations {
             header?: {
                 /** @description Required for session-authenticated mutations; Origin must match PUBLIC_ORIGIN. */
                 "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                /**
+                 * @description Must match PUBLIC_ORIGIN for login, invitation acceptance and all session mutations. API-key mutations do not require it.
+                 * @example https://assets.example.com
+                 */
+                Origin?: string;
             };
             path: {
+                /**
+                 * @description The file id copied from a create or list response.
+                 * @example 22222222-2222-4222-8222-222222222222
+                 */
                 id: string;
             };
             cookie?: never;
@@ -1051,7 +3480,160 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    /**
+                     * @example {
+                     *       "status": "deleted"
+                     *     }
+                     */
+                    "application/json": {
+                        status: string;
+                    };
+                };
+            };
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "not_found",
+                     *         "message": "Resource not found",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Resource exists, has expired, or violates a constraint */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "conflict",
+                     *         "message": "Resource exists, has expired, or violates a constraint",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Required storage, backup or signing configuration is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "storage_unavailable",
+                     *         "message": "Required storage, backup or signing configuration is unavailable",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
             };
         };
     };
@@ -1061,14 +3643,28 @@ export interface operations {
             header?: {
                 /** @description Required for session-authenticated mutations; Origin must match PUBLIC_ORIGIN. */
                 "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                /**
+                 * @description Must match PUBLIC_ORIGIN for login, invitation acceptance and all session mutations. API-key mutations do not require it.
+                 * @example https://assets.example.com
+                 */
+                Origin?: string;
             };
             path: {
+                /**
+                 * @description The file id copied from a create or list response.
+                 * @example 22222222-2222-4222-8222-222222222222
+                 */
                 id: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
+                /**
+                 * @example {
+                 *       "name": "welcome.txt"
+                 *     }
+                 */
                 "application/json": {
                     name?: string;
                     /**
@@ -1085,19 +3681,180 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    /**
+                     * @example {
+                     *       "updated": true
+                     *     }
+                     */
+                    "application/json": {
+                        updated: boolean;
+                    };
+                };
             };
-            403: components["responses"]["Error"];
+            /** @description Check the supplied fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "invalid_input",
+                     *         "message": "Check the supplied fields",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "not_found",
+                     *         "message": "Resource not found",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Required storage, backup or signing configuration is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "storage_unavailable",
+                     *         "message": "Required storage, backup or signing configuration is unavailable",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
         };
     };
     restoreAsset: {
         parameters: {
             query?: never;
-            header?: {
+            header: {
                 /** @description Required for session-authenticated mutations; Origin must match PUBLIC_ORIGIN. */
-                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "X-CSRF-Token": string;
+                /**
+                 * @description Must match PUBLIC_ORIGIN for login, invitation acceptance and all session mutations. API-key mutations do not require it.
+                 * @example https://assets.example.com
+                 */
+                Origin: string;
             };
             path: {
+                /**
+                 * @description The file id copied from a create or list response.
+                 * @example 22222222-2222-4222-8222-222222222222
+                 */
                 id: string;
             };
             cookie?: never;
@@ -1109,10 +3866,209 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    /**
+                     * @example {
+                     *       "status": "ready"
+                     *     }
+                     */
+                    "application/json": {
+                        status: string;
+                    };
+                };
             };
-            403: components["responses"]["Error"];
-            409: components["responses"]["Error"];
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "not_found",
+                     *         "message": "Resource not found",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Resource exists, has expired, or violates a constraint */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "conflict",
+                     *         "message": "Resource exists, has expired, or violates a constraint",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Project quota, staging capacity or disk reserve exceeded */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "capacity_exceeded",
+                     *         "message": "Project quota, staging capacity or disk reserve exceeded",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description File length or checksum verification failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "integrity_failed",
+                     *         "message": "File length or checksum verification failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Required storage, backup or signing configuration is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "storage_unavailable",
+                     *         "message": "Required storage, backup or signing configuration is unavailable",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
         };
     };
     getContent: {
@@ -1125,8 +4081,14 @@ export interface operations {
             header?: {
                 /** @description Single byte range; multipart ranges fall back to full content */
                 Range?: string;
+                /** @description Use the ETag previously received. If it differs, the server sends the full file instead of the requested range. */
+                "If-Range"?: string;
             };
             path: {
+                /**
+                 * @description The file id copied from a create or list response.
+                 * @example 22222222-2222-4222-8222-222222222222
+                 */
                 id: string;
             };
             cookie?: never;
@@ -1136,27 +4098,209 @@ export interface operations {
             /** @description Authorized or public bytes; safe images and video may display inline */
             200: {
                 headers: {
+                    /** @example text/plain; charset=utf-8 */
+                    "Content-Type"?: string;
+                    /** @example 12 */
+                    "Content-Length"?: number;
+                    /** @example attachment; filename=hello.txt */
+                    "Content-Disposition"?: string;
+                    /** @example bytes */
+                    "Accept-Ranges"?: string;
+                    /** @example "a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447" */
+                    ETag?: string;
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/octet-stream": string;
+                };
             };
             /** @description Single byte range with Content-Range and exact Content-Length */
             206: {
                 headers: {
+                    /** @example text/plain; charset=utf-8 */
+                    "Content-Type"?: string;
+                    /** @example 5 */
+                    "Content-Length"?: number;
+                    /** @example attachment; filename=hello.txt */
+                    "Content-Disposition"?: string;
+                    /** @example bytes */
+                    "Accept-Ranges"?: string;
+                    /** @example "a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447" */
+                    ETag?: string;
+                    /** @example bytes 0-4/12 */
+                    "Content-Range"?: string;
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/octet-stream": string;
+                };
             };
-            401: components["responses"]["Error"];
-            404: components["responses"]["Error"];
-            /** @description Unsatisfiable range; Content-Range includes total size */
-            416: {
+            /** @description Invalid credentials or expired session */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
             };
-            503: components["responses"]["Error"];
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "not_found",
+                     *         "message": "Resource not found",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Range cannot be satisfied. Content-Range reports the total file size. */
+            416: {
+                headers: {
+                    /** @example bytes *\/12 */
+                    "Content-Range"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": "range_not_satisfiable"
+                     *     }
+                     */
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Try again shortly */
+            429: {
+                headers: {
+                    /**
+                     * @description Wait this many seconds before retrying.
+                     * @example 2
+                     */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "busy",
+                     *         "message": "Download capacity is busy; retry shortly"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Required storage, backup or signing configuration is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "storage_unavailable",
+                     *         "message": "Required storage, backup or signing configuration is unavailable",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
         };
     };
     headContent: {
@@ -1169,8 +4313,14 @@ export interface operations {
             header?: {
                 /** @description Single byte range; multipart ranges fall back to full content */
                 Range?: string;
+                /** @description Use the ETag previously received. If it differs, the server sends the full file instead of the requested range. */
+                "If-Range"?: string;
             };
             path: {
+                /**
+                 * @description The file id copied from a create or list response.
+                 * @example 22222222-2222-4222-8222-222222222222
+                 */
                 id: string;
             };
             cookie?: never;
@@ -1180,6 +4330,16 @@ export interface operations {
             /** @description Authorized metadata headers without retrieving file bytes */
             200: {
                 headers: {
+                    /** @example text/plain; charset=utf-8 */
+                    "Content-Type"?: string;
+                    /** @example 12 */
+                    "Content-Length"?: number;
+                    /** @example attachment; filename=hello.txt */
+                    "Content-Disposition"?: string;
+                    /** @example bytes */
+                    "Accept-Ranges"?: string;
+                    /** @example "a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447" */
+                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -1187,9 +4347,187 @@ export interface operations {
             /** @description Authorized range headers without a body */
             206: {
                 headers: {
+                    /** @example text/plain; charset=utf-8 */
+                    "Content-Type"?: string;
+                    /** @example 5 */
+                    "Content-Length"?: number;
+                    /** @example attachment; filename=hello.txt */
+                    "Content-Disposition"?: string;
+                    /** @example bytes */
+                    "Accept-Ranges"?: string;
+                    /** @example "a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447" */
+                    ETag?: string;
+                    /** @example bytes 0-4/12 */
+                    "Content-Range"?: string;
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "not_found",
+                     *         "message": "Resource not found",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Range cannot be satisfied. Content-Range reports the total file size. */
+            416: {
+                headers: {
+                    /** @example bytes *\/12 */
+                    "Content-Range"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": "range_not_satisfiable"
+                     *     }
+                     */
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Try again shortly */
+            429: {
+                headers: {
+                    /**
+                     * @description Wait this many seconds before retrying.
+                     * @example 2
+                     */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "busy",
+                     *         "message": "Download capacity is busy; retry shortly"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Required storage, backup or signing configuration is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "storage_unavailable",
+                     *         "message": "Required storage, backup or signing configuration is unavailable",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
             };
         };
     };
@@ -1199,14 +4537,28 @@ export interface operations {
             header?: {
                 /** @description Required for session-authenticated mutations; Origin must match PUBLIC_ORIGIN. */
                 "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                /**
+                 * @description Must match PUBLIC_ORIGIN for login, invitation acceptance and all session mutations. API-key mutations do not require it.
+                 * @example https://assets.example.com
+                 */
+                Origin?: string;
             };
             path: {
+                /**
+                 * @description The file id copied from a create or list response.
+                 * @example 22222222-2222-4222-8222-222222222222
+                 */
                 id: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
+                /**
+                 * @example {
+                 *       "expires_in": 900
+                 *     }
+                 */
                 "application/json": {
                     /** @default 900 */
                     expires_in?: number;
@@ -1220,10 +4572,184 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "url": "https://assets.example.com/v1/assets/22222222-2222-4222-8222-222222222222/content?token=example-signed-token",
+                     *       "expires_in": 900
+                     *     }
+                     */
                     "application/json": {
                         /** Format: uri */
                         url: string;
                         expires_in: number;
+                    };
+                };
+            };
+            /** @description Check the supplied fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "invalid_input",
+                     *         "message": "Check the supplied fields",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "not_found",
+                     *         "message": "Resource not found",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Resource exists, has expired, or violates a constraint */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "conflict",
+                     *         "message": "Resource exists, has expired, or violates a constraint",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Required storage, backup or signing configuration is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "storage_unavailable",
+                     *         "message": "Required storage, backup or signing configuration is unavailable",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
                     };
                 };
             };
@@ -1235,8 +4761,17 @@ export interface operations {
             header?: {
                 /** @description Required for session-authenticated mutations; Origin must match PUBLIC_ORIGIN. */
                 "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                /**
+                 * @description Must match PUBLIC_ORIGIN for login, invitation acceptance and all session mutations. API-key mutations do not require it.
+                 * @example https://assets.example.com
+                 */
+                Origin?: string;
             };
             path: {
+                /**
+                 * @description The file id copied from a create or list response.
+                 * @example 22222222-2222-4222-8222-222222222222
+                 */
                 id: string;
             };
             cookie?: never;
@@ -1248,9 +4783,161 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    /**
+                     * @example {
+                     *       "status": "queued"
+                     *     }
+                     */
+                    "application/json": {
+                        status: string;
+                    };
+                };
             };
-            409: components["responses"]["Error"];
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "not_found",
+                     *         "message": "Resource not found",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Resource exists, has expired, or violates a constraint */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "conflict",
+                     *         "message": "Resource exists, has expired, or violates a constraint",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Required storage, backup or signing configuration is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "storage_unavailable",
+                     *         "message": "Required storage, backup or signing configuration is unavailable",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
         };
     };
     overview: {
@@ -1268,7 +4955,107 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "files": 1,
+                     *       "bytes": 12,
+                     *       "projects": 1,
+                     *       "queued": 0,
+                     *       "failed": 0,
+                     *       "recent": [
+                     *         {
+                     *           "id": "22222222-2222-4222-8222-222222222222",
+                     *           "project_id": "11111111-1111-4111-8111-111111111111",
+                     *           "name": "hello.txt",
+                     *           "mime": "text/plain; charset=utf-8",
+                     *           "size_bytes": 12,
+                     *           "sha256": "a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447",
+                     *           "status": "ready",
+                     *           "visibility": "private",
+                     *           "created_at": "2026-10-10T08:00:00Z"
+                     *         }
+                     *       ],
+                     *       "activity": [
+                     *         {
+                     *           "day": "2026-10-10",
+                     *           "count": 1
+                     *         }
+                     *       ]
+                     *     }
+                     */
                     "application/json": components["schemas"]["Overview"];
+                };
+            };
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
                 };
             };
         };
@@ -1276,13 +5063,15 @@ export interface operations {
     activity: {
         parameters: {
             query?: {
+                /** @description Page size, 1–100. Missing or invalid values become 50. */
                 limit?: components["parameters"]["Limit"];
+                /** @description Rows to skip, 0–100000. Missing or invalid values become 0. */
                 offset?: components["parameters"]["Offset"];
-                /** @description Case-insensitive search across authorized records */
+                /** @description Optional case-insensitive search of file names. Omit it to return all authorized results. */
                 q?: string;
                 /** @description Audit action prefix */
                 action?: string;
-                /** @description Restrict to an authorized project */
+                /** @description Limit results to this project id. Omit it to include all projects you can access; a project key remains limited to its own project. */
                 project_id?: string;
             };
             header?: never;
@@ -1297,8 +5086,99 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "id": "66666666-6666-4666-8666-666666666666",
+                     *           "actor": "Alex Morgan",
+                     *           "action": "asset.created",
+                     *           "project_id": "11111111-1111-4111-8111-111111111111",
+                     *           "object_id": "22222222-2222-4222-8222-222222222222",
+                     *           "detail": "hello.txt",
+                     *           "created_at": "2026-10-10T08:00:00Z"
+                     *         }
+                     *       ],
+                     *       "limit": 50,
+                     *       "offset": 0
+                     *     }
+                     */
                     "application/json": {
                         items: components["schemas"]["Activity"][];
+                        limit: number;
+                        offset: number;
+                    };
+                };
+            };
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
                     };
                 };
             };
@@ -1307,13 +5187,15 @@ export interface operations {
     listUploads: {
         parameters: {
             query?: {
+                /** @description Page size, 1–100. Missing or invalid values become 50. */
                 limit?: components["parameters"]["Limit"];
+                /** @description Rows to skip, 0–100000. Missing or invalid values become 0. */
                 offset?: components["parameters"]["Offset"];
-                /** @description Case-insensitive search across authorized records */
+                /** @description Optional case-insensitive search of file names. Omit it to return all authorized results. */
                 q?: string;
-                /** @description Effective asset or transfer status */
+                /** @description Optional asset state: queued, uploading, verifying, ready or failed. Only workspace admins can list deleted assets. */
                 status?: string;
-                /** @description Restrict to an authorized project */
+                /** @description Limit results to this project id. Omit it to include all projects you can access; a project key remains limited to its own project. */
                 project_id?: string;
             };
             header?: never;
@@ -1328,8 +5210,129 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "id": "33333333-3333-4333-8333-333333333333",
+                     *           "project_id": "11111111-1111-4111-8111-111111111111",
+                     *           "name": "hello.txt",
+                     *           "size_bytes": 12,
+                     *           "status": "receiving",
+                     *           "asset_id": "",
+                     *           "part_bytes": 8388608,
+                     *           "parts": [],
+                     *           "expires_at": "2026-10-11T08:00:00Z",
+                     *           "created_at": "2026-10-10T08:00:00Z",
+                     *           "asset_status": "",
+                     *           "error_code": "",
+                     *           "uploaded_chunks": 0
+                     *         }
+                     *       ],
+                     *       "limit": 50,
+                     *       "offset": 0
+                     *     }
+                     */
                     "application/json": {
                         items: components["schemas"]["Upload"][];
+                        limit: number;
+                        offset: number;
+                    };
+                };
+            };
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Required storage, backup or signing configuration is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "storage_unavailable",
+                     *         "message": "Required storage, backup or signing configuration is unavailable",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
                     };
                 };
             };
@@ -1341,12 +5344,24 @@ export interface operations {
             header?: {
                 /** @description Required for session-authenticated mutations; Origin must match PUBLIC_ORIGIN. */
                 "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                /**
+                 * @description Must match PUBLIC_ORIGIN for login, invitation acceptance and all session mutations. API-key mutations do not require it.
+                 * @example https://assets.example.com
+                 */
+                Origin?: string;
             };
             path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
+                /**
+                 * @example {
+                 *       "project_id": "11111111-1111-4111-8111-111111111111",
+                 *       "name": "hello.txt",
+                 *       "size_bytes": 12
+                 *     }
+                 */
                 "application/json": {
                     /** Format: uuid */
                     project_id: string;
@@ -1364,11 +5379,170 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "id": "33333333-3333-4333-8333-333333333333",
+                     *       "project_id": "11111111-1111-4111-8111-111111111111",
+                     *       "name": "hello.txt",
+                     *       "size_bytes": 12,
+                     *       "status": "receiving",
+                     *       "asset_id": "",
+                     *       "part_bytes": 8388608,
+                     *       "parts": [],
+                     *       "expires_at": "2026-10-11T08:00:00Z",
+                     *       "created_at": "2026-10-10T08:00:00Z",
+                     *       "asset_status": "",
+                     *       "error_code": "",
+                     *       "uploaded_chunks": 0
+                     *     }
+                     */
                     "application/json": components["schemas"]["Upload"];
                 };
             };
-            413: components["responses"]["Error"];
-            503: components["responses"]["Error"];
+            /** @description Check the supplied fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "invalid_input",
+                     *         "message": "Check the supplied fields",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Project quota, staging capacity or disk reserve exceeded */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "capacity_exceeded",
+                     *         "message": "Project quota, staging capacity or disk reserve exceeded",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Required storage, backup or signing configuration is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "storage_unavailable",
+                     *         "message": "Required storage, backup or signing configuration is unavailable",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
         };
     };
     getUpload: {
@@ -1376,6 +5550,10 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /**
+                 * @description The upload id copied from a create or list response.
+                 * @example 33333333-3333-4333-8333-333333333333
+                 */
                 id: string;
             };
             cookie?: never;
@@ -1388,10 +5566,152 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "id": "33333333-3333-4333-8333-333333333333",
+                     *       "project_id": "11111111-1111-4111-8111-111111111111",
+                     *       "name": "hello.txt",
+                     *       "size_bytes": 12,
+                     *       "status": "receiving",
+                     *       "asset_id": "",
+                     *       "part_bytes": 8388608,
+                     *       "parts": [
+                     *         {
+                     *           "index": 0,
+                     *           "size_bytes": 12,
+                     *           "sha256": "a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447"
+                     *         }
+                     *       ],
+                     *       "expires_at": "2026-10-11T08:00:00Z",
+                     *       "created_at": "2026-10-10T08:00:00Z",
+                     *       "asset_status": "",
+                     *       "error_code": "",
+                     *       "uploaded_chunks": 0
+                     *     }
+                     */
                     "application/json": components["schemas"]["Upload"];
                 };
             };
-            404: components["responses"]["Error"];
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "not_found",
+                     *         "message": "Resource not found",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Required storage, backup or signing configuration is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "storage_unavailable",
+                     *         "message": "Required storage, backup or signing configuration is unavailable",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
         };
     };
     cancelUpload: {
@@ -1400,8 +5720,17 @@ export interface operations {
             header?: {
                 /** @description Required for session-authenticated mutations; Origin must match PUBLIC_ORIGIN. */
                 "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                /**
+                 * @description Must match PUBLIC_ORIGIN for login, invitation acceptance and all session mutations. API-key mutations do not require it.
+                 * @example https://assets.example.com
+                 */
+                Origin?: string;
             };
             path: {
+                /**
+                 * @description The upload id copied from a create or list response.
+                 * @example 33333333-3333-4333-8333-333333333333
+                 */
                 id: string;
             };
             cookie?: never;
@@ -1413,9 +5742,161 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    /**
+                     * @example {
+                     *       "cancelled": true
+                     *     }
+                     */
+                    "application/json": {
+                        cancelled: boolean;
+                    };
+                };
             };
-            409: components["responses"]["Error"];
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "not_found",
+                     *         "message": "Resource not found",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Resource exists, has expired, or violates a constraint */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "conflict",
+                     *         "message": "Resource exists, has expired, or violates a constraint",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Required storage, backup or signing configuration is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "storage_unavailable",
+                     *         "message": "Required storage, backup or signing configuration is unavailable",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
         };
     };
     uploadPart: {
@@ -1425,9 +5906,22 @@ export interface operations {
                 /** @description Required for session-authenticated mutations; Origin must match PUBLIC_ORIGIN. */
                 "X-CSRF-Token"?: components["parameters"]["CSRF"];
                 "X-Content-SHA256": string;
+                /**
+                 * @description Must match PUBLIC_ORIGIN for login, invitation acceptance and all session mutations. API-key mutations do not require it.
+                 * @example https://assets.example.com
+                 */
+                Origin?: string;
             };
             path: {
+                /**
+                 * @description The upload id copied from a create or list response.
+                 * @example 33333333-3333-4333-8333-333333333333
+                 */
                 id: string;
+                /**
+                 * @description Zero-based part number. Part 0 is the first part of the file.
+                 * @example 0
+                 */
                 index: number;
             };
             cookie?: never;
@@ -1443,10 +5937,237 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    /**
+                     * @example {
+                     *       "received": true
+                     *     }
+                     */
+                    "application/json": {
+                        received: boolean;
+                    };
+                };
             };
-            409: components["responses"]["Error"];
-            422: components["responses"]["Error"];
+            /** @description Check the supplied fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "invalid_input",
+                     *         "message": "Check the supplied fields",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "not_found",
+                     *         "message": "Resource not found",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Resource exists, has expired, or violates a constraint */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "conflict",
+                     *         "message": "Resource exists, has expired, or violates a constraint",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description File length or checksum verification failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "integrity_failed",
+                     *         "message": "File length or checksum verification failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Try again shortly */
+            429: {
+                headers: {
+                    /**
+                     * @description Wait this many seconds before retrying.
+                     * @example 2
+                     */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "busy",
+                     *         "message": "Upload transfers are busy; retry shortly"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Required storage, backup or signing configuration is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "storage_unavailable",
+                     *         "message": "Required storage, backup or signing configuration is unavailable",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
         };
     };
     completeUpload: {
@@ -1455,8 +6176,17 @@ export interface operations {
             header?: {
                 /** @description Required for session-authenticated mutations; Origin must match PUBLIC_ORIGIN. */
                 "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                /**
+                 * @description Must match PUBLIC_ORIGIN for login, invitation acceptance and all session mutations. API-key mutations do not require it.
+                 * @example https://assets.example.com
+                 */
+                Origin?: string;
             };
             path: {
+                /**
+                 * @description The upload id copied from a create or list response.
+                 * @example 33333333-3333-4333-8333-333333333333
+                 */
                 id: string;
             };
             cookie?: never;
@@ -1469,11 +6199,218 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "id": "22222222-2222-4222-8222-222222222222",
+                     *       "project_id": "11111111-1111-4111-8111-111111111111",
+                     *       "name": "hello.txt",
+                     *       "mime": "text/plain; charset=utf-8",
+                     *       "size_bytes": 12,
+                     *       "sha256": "a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447",
+                     *       "status": "queued",
+                     *       "visibility": "private",
+                     *       "created_at": "2026-10-10T08:00:00Z"
+                     *     }
+                     */
                     "application/json": components["schemas"]["Asset"];
                 };
             };
-            409: components["responses"]["Error"];
-            422: components["responses"]["Error"];
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "not_found",
+                     *         "message": "Resource not found",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Resource exists, has expired, or violates a constraint */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "conflict",
+                     *         "message": "Resource exists, has expired, or violates a constraint",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description File length or checksum verification failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "integrity_failed",
+                     *         "message": "File length or checksum verification failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Try again shortly */
+            429: {
+                headers: {
+                    /**
+                     * @description Wait this many seconds before retrying.
+                     * @example 2
+                     */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "busy",
+                     *         "message": "Upload transfers are busy; retry shortly"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Required storage, backup or signing configuration is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "storage_unavailable",
+                     *         "message": "Required storage, backup or signing configuration is unavailable",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
         };
     };
     storageHealth: {
@@ -1491,12 +6428,94 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "component": "jobs",
+                     *           "status": "healthy",
+                     *           "detail": "0 durable jobs; 0 leased; 0 failed assets"
+                     *         }
+                     *       ]
+                     *     }
+                     */
                     "application/json": {
                         items: components["schemas"]["Health"][];
                     };
                 };
             };
-            403: components["responses"]["Error"];
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
         };
     };
     settings: {
@@ -1514,7 +6533,172 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "name": "AssetHub",
+                     *       "version": "0.3.0",
+                     *       "phase": "content",
+                     *       "features": {
+                     *         "uploads": true,
+                     *         "content": true,
+                     *         "projects": true,
+                     *         "api_keys": true,
+                     *         "invitations": false,
+                     *         "backups": true
+                     *       },
+                     *       "storage_provider": "telegram",
+                     *       "asset_limit_bytes": 536870912,
+                     *       "upload_part_bytes": 8388608,
+                     *       "storage_chunk_bytes": 16777216,
+                     *       "backup_retention_days": 30,
+                     *       "signed_url_seconds": 900,
+                     *       "encryption": "AES-256-GCM",
+                     *       "editable": false
+                     *     }
+                     */
                     "application/json": components["schemas"]["Settings"];
+                };
+            };
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+        };
+    };
+    liveness: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Check server liveness */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "status": "alive"
+                     *     }
+                     */
+                    "application/json": {
+                        status: string;
+                    };
+                };
+            };
+        };
+    };
+    readiness: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Check server readiness */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "status": "ready"
+                     *     }
+                     */
+                    "application/json": {
+                        status: string;
+                    };
+                };
+            };
+            /** @description Required dependencies unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "status": "unavailable"
+                     *     }
+                     */
+                    "application/json": {
+                        status: string;
+                    };
                 };
             };
         };

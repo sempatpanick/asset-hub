@@ -1,13 +1,12 @@
 "use client";
 import { SearchSelect } from "./select";
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import { Suspense, useState } from "react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { useWorkspace, type Section } from "./workspace-shell";
 import {
   ArrowRight,
   Check,
-  ChevronRight,
   CloudUpload,
   Copy,
   Database,
@@ -15,15 +14,11 @@ import {
   FileImage,
   FileText,
   Folder,
-  FolderOpen,
   Grid2X2,
   HardDrive,
   KeyRound,
   Layers3,
-  LayoutDashboard,
   List,
-  LogOut,
-  Menu,
   Plus,
   Search,
   Settings2,
@@ -42,45 +37,14 @@ import type {
   Member,
   Overview,
   Project,
-  Settings,
-  User,
 } from "@assethub/api-client";
-import { mutate, request, setCsrf } from "@/infrastructure/api/client";
-import {
-  bytes,
-  useAction,
-  useResource,
-  useDebounced,
-  useLocationQuery,
-} from "@/features/hooks";
-import { HeaderSearch } from "./header-search";
+import { mutate } from "@/infrastructure/api/client";
+import { bytes, useAction, useResource, useDebounced } from "@/features/hooks";
 import { Pagination, TableSearch } from "./table-controls";
 import { Badge, Empty, ErrorNotice, LinkAction, Loading, Modal } from "./ui";
 import { UploadDialog, UploadHistory } from "./uploads";
 import { AssetDetails, safeImage, assetContent } from "./asset-details";
 
-type Section =
-  | "overview"
-  | "files"
-  | "projects"
-  | "uploads"
-  | "api-keys"
-  | "activity"
-  | "settings";
-const navigation = [
-  { id: "overview", title: "Overview", icon: LayoutDashboard, href: "/" },
-  { id: "files", title: "File Manager", icon: FolderOpen, href: "/files/" },
-  { id: "projects", title: "Projects", icon: Grid2X2, href: "/projects/" },
-  { id: "uploads", title: "Uploads", icon: CloudUpload, href: "/uploads/" },
-  { id: "api-keys", title: "API Keys", icon: KeyRound, href: "/api-keys/" },
-  {
-    id: "activity",
-    title: "Activity Logs",
-    icon: ActivityIcon,
-    href: "/activity/",
-  },
-  { id: "settings", title: "Settings", icon: Settings2, href: "/settings/" },
-];
 const headings: Record<Section, [string, string]> = {
   overview: [
     "Workspace overview",
@@ -131,10 +95,32 @@ async function copy(value: string) {
 }
 
 export default function Dashboard({ section }: { section: Section }) {
-  const router = useRouter();
-  const [user, setUser] = useState<User>();
-  const [authError, setAuthError] = useState("");
-  const [mobile, setMobile] = useState(false);
+  return (
+    <Suspense fallback={<Loading />}>
+      <RoutedDashboard section={section} />
+    </Suspense>
+  );
+}
+function RoutedDashboard({ section }: { section: Section }) {
+  const params = useSearchParams();
+  const { searchRevision } = useWorkspace();
+  const initialSearch = section === "files" ? (params.get("q") ?? "") : "";
+  return (
+    <DashboardContent
+      key={`${section}:${initialSearch}:${section === "files" ? searchRevision : 0}`}
+      section={section}
+      initialSearch={initialSearch}
+    />
+  );
+}
+function DashboardContent({
+  section,
+  initialSearch,
+}: {
+  section: Section;
+  initialSearch: string;
+}) {
+  const { user, projects, settings, health } = useWorkspace();
   const [selectedProject, setProject] = useState("");
   const [modal, setModal] = useState<
     "project" | "key" | "invite" | "upload" | null
@@ -142,13 +128,7 @@ export default function Dashboard({ section }: { section: Section }) {
   const [editing, setEditing] = useState<Project>();
   const [selectedAsset, setSelectedAsset] = useState<Asset>();
   const [members, setMembers] = useState<Project>();
-  const locationQuery = useLocationQuery();
-  const [searchInput, setSearch] = useState<string>();
-  const search =
-    searchInput ??
-    (section === "files"
-      ? (new URLSearchParams(locationQuery).get("q") ?? "")
-      : "");
+  const [search, setSearch] = useState(initialSearch);
   const query = useDebounced(search);
   const [filter, setFilter] = useState("");
   const [fileType, setFileType] = useState("");
@@ -168,35 +148,13 @@ export default function Dashboard({ section }: { section: Section }) {
     setOffset(0);
   };
   const action = useAction();
-  useEffect(() => {
-    const controller = new AbortController();
-    request<{ user: User; csrf_token: string }>("/auth/me", {
-      signal: controller.signal,
-    })
-      .then((r) => {
-        setCsrf(r.csrf_token);
-        setUser(r.user);
-      })
-      .catch((e) => {
-        if (!controller.signal.aborted) {
-          if (e.status === 401) router.replace("/login/");
-          else setAuthError(e.message);
-        }
-      });
-    return () => controller.abort();
-  }, [router]);
-  const projects = useResource<Items<Project>>(user ? "/projects" : null);
   const allProjects = projects.data?.items ?? [];
   const managedProjects = allProjects.filter((p) => p.role === "manager");
   const project =
     selectedProject ||
     (section === "api-keys" ? (managedProjects[0]?.id ?? "") : "");
-  const settings = useResource<Settings>(user ? "/settings" : null, 30000);
   const overview = useResource<Overview>(
     user && section === "overview" ? "/overview" : null,
-  );
-  const health = useResource<Items<Health>>(
-    user?.role === "admin" ? "/storage/health" : null,
   );
   const assets = useResource<Items<Asset>>(
     user && section === "files"
@@ -240,913 +198,740 @@ export default function Dashboard({ section }: { section: Section }) {
       (!filter || status === filter)
     );
   });
-  if (!user)
-    return (
-      <div className="boot-screen">
-        <span className="brand-mark">
-          <Layers3 />
-        </span>
-        {authError ? (
-          <>
-            <ErrorNotice message={authError} />
-            <button className="button" onClick={() => window.location.reload()}>
-              Try again
-            </button>
-          </>
-        ) : (
-          <Loading />
-        )}
-      </div>
-    );
-  const totalQuota = allProjects.reduce((sum, p) => sum + p.quota_bytes, 0);
-  const totalUsed = allProjects.reduce((sum, p) => sum + p.used_bytes, 0);
   const title = headings[section];
   return (
-    <div className="app-shell">
-      {mobile && (
-        <button
-          className="sidebar-backdrop"
-          aria-label="Close navigation"
-          onClick={() => setMobile(false)}
-        />
-      )}
-      <aside className={`sidebar ${mobile ? "open" : ""}`}>
-        <Link href="/" className="brand">
-          <span className="brand-mark">
-            <Layers3 size={22} />
-          </span>
-          AssetHub
-          <span className="brand-dot" />
-        </Link>
-        <div className="workspace-label">
-          <span className="workspace-icon">
-            <HardDrive size={17} />
-          </span>
-          <div>
-            <strong>Your workspace</strong>
-            <span>Self-hosted storage</span>
-          </div>
-          <ShieldCheck size={15} />
+    <>
+      <div className="page-heading">
+        <div>
+          <div className="eyebrow">YOUR WORKSPACE, AT A GLANCE</div>
+          <h1>{title[0]}</h1>
+          <p>{title[1]}</p>
         </div>
-        <p className="nav-label">WORKSPACE</p>
-        <nav aria-label="Main navigation">
-          {navigation.map((n) => (
-            <Link
-              key={n.id}
-              href={n.href}
-              className={`nav-item ${section === n.id ? "active" : ""}`}
-              aria-current={section === n.id ? "page" : undefined}
-              onClick={() => setMobile(false)}
+        <div className="heading-actions">
+          {["files", "api-keys", "activity"].includes(section) && (
+            <label className="select-label">
+              <Folder size={15} />
+              <SearchSelect
+                aria-label="Project filter"
+                value={project}
+                onValueChange={(value) => {
+                  setProject(value);
+                  setOffset(0);
+                }}
+              >
+                {section !== "api-keys" && (
+                  <option value="">All projects</option>
+                )}
+                {(section === "api-keys" ? managedProjects : allProjects).map(
+                  (p) => (
+                    <option value={p.id} key={p.id}>
+                      {p.name}
+                    </option>
+                  ),
+                )}
+              </SearchSelect>
+            </label>
+          )}
+          {section === "projects" || section === "overview" ? (
+            <button
+              className="button primary"
+              onClick={() => {
+                setEditing(undefined);
+                setModal("project");
+              }}
             >
-              <n.icon size={19} strokeWidth={1.8} />
-              <span>{n.title}</span>
-              {section === n.id && <span className="active-dot" />}
-            </Link>
-          ))}
-        </nav>
-        <div className="sidebar-bottom">
-          <div className="storage-card">
-            <div className="storage-card-title">
-              <HardDrive size={16} />
-              <strong>Workspace storage</strong>
+              <Plus size={17} />
+              New project
+            </button>
+          ) : section === "api-keys" ? (
+            <button
+              className="button primary"
+              disabled={!project}
+              onClick={() => setModal("key")}
+            >
+              <Plus size={17} />
+              Create API key
+            </button>
+          ) : section === "files" || section === "uploads" ? (
+            <button
+              className="button primary"
+              disabled={
+                !settings.data?.features.uploads ||
+                !allProjects.some((p) => p.role !== "viewer")
+              }
+              title={
+                settings.data?.features.uploads
+                  ? "Upload to a project"
+                  : "Configure storage and encryption to enable uploads"
+              }
+              onClick={() => setModal("upload")}
+            >
+              <CloudUpload size={17} />
+              Upload files
+            </button>
+          ) : null}
+        </div>
+      </div>
+      <ErrorNotice message={action.error || projects.error || settings.error} />
+      {section === "overview" && (
+        <>
+          <ErrorNotice message={overview.error} />
+          {overview.loading ? (
+            <Loading />
+          ) : (
+            overview.data && (
+              <OverviewView
+                backupEnabled={settings.data?.features.backups !== false}
+                data={overview.data}
+                health={health.data?.items}
+                onProject={() => setModal("project")}
+              />
+            )
+          )}
+        </>
+      )}
+      {section === "projects" && (
+        <>
+          <section className="panel collection-toolbar">
+            <div className="file-toolbar">
+              <TableSearch
+                label="Search projects"
+                value={search}
+                onChange={searchTable}
+              />
+              <SearchSelect
+                aria-label="Project role filter"
+                value={filter}
+                onValueChange={filterTable}
+              >
+                <option value="">All roles</option>
+                {["viewer", "editor", "manager"].map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </SearchSelect>
             </div>
-            <div className="progress-track">
-              <div
-                style={{
-                  width: totalQuota
-                    ? `${Math.min((totalUsed / totalQuota) * 100, 100)}%`
-                    : "0%",
+          </section>
+          {projects.loading ? (
+            <Loading />
+          ) : filteredProjects.length ? (
+            <div className="project-grid">
+              {filteredProjects.slice(offset, offset + pageSize).map((p, i) => (
+                <article className="panel project-card" key={p.id}>
+                  <div className="project-top">
+                    <span
+                      className={`project-symbol ${["violet", "blue", "peach", "mint"][i % 4]}`}
+                    >
+                      <Folder size={25} />
+                    </span>
+                    <Badge tone="neutral">{p.role}</Badge>
+                  </div>
+                  <h3>{p.name}</h3>
+                  <p>
+                    {p.description ||
+                      "A dedicated space for your application’s assets."}
+                  </p>
+                  <div className="project-stats">
+                    <span>
+                      <File size={14} />
+                      {p.files} files
+                    </span>
+                    <span>{bytes(p.used_bytes)}</span>
+                  </div>
+                  <div className="progress-track">
+                    <div
+                      style={{
+                        width: `${Math.min((p.used_bytes / p.quota_bytes) * 100, 100)}%`,
+                      }}
+                    />
+                  </div>
+                  <div className="project-capacity">
+                    {bytes(p.quota_bytes)} allocated
+                  </div>
+                  <div className="project-footer">
+                    <button className="text-link" onClick={() => setMembers(p)}>
+                      Members
+                      <ArrowRight size={14} />
+                    </button>
+                    {p.role === "manager" && (
+                      <button
+                        className="icon-button"
+                        aria-label={`Edit ${p.name}`}
+                        onClick={() => {
+                          setEditing(p);
+                          setModal("project");
+                        }}
+                      >
+                        <Settings2 size={17} />
+                      </button>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <section className="panel">
+              <Empty
+                title={
+                  search || filter
+                    ? "No matching projects"
+                    : "Make room for your first project"
+                }
+                detail="Projects keep each application’s assets and API permissions together."
+                action={
+                  <button
+                    className="button primary"
+                    onClick={() => setModal("project")}
+                  >
+                    <Plus size={16} />
+                    Create a project
+                  </button>
+                }
+              />
+            </section>
+          )}
+          <Pagination
+            offset={offset}
+            count={filteredProjects.slice(offset, offset + pageSize).length}
+            pageSize={pageSize}
+            onChange={setOffset}
+            onPageSizeChange={resizePage}
+            hasMore={offset + pageSize < filteredProjects.length}
+          />
+        </>
+      )}
+      {section === "files" && (
+        <section className="panel">
+          <div className="file-toolbar">
+            <div className="search-field">
+              <Search size={17} />
+              <input
+                aria-label="Search files"
+                placeholder="Search by file name…"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setOffset(0);
                 }}
               />
-            </div>
-            <p>
-              {totalQuota ? (
-                <>
-                  <strong>{bytes(totalUsed)}</strong> of {bytes(totalQuota)}{" "}
-                  allocated
-                </>
-              ) : (
-                "Set capacity with your first project"
+              {search && (
+                <button
+                  className="icon-button"
+                  onClick={() => searchTable("")}
+                  aria-label="Clear search"
+                >
+                  <X size={15} />
+                </button>
               )}
-            </p>
-            <Link href="/projects/">
-              Manage projects
-              <ArrowRight size={13} />
-            </Link>
-          </div>
-          <div className="sidebar-version">
-            <span className="tiny-dot" />
-            Self-hosted workspace
-            <span>v{settings.data?.version ?? "0.1.0"}</span>
-          </div>
-        </div>
-      </aside>
-      <div className="main-shell">
-        <header className="topbar">
-          <div className="breadcrumb">
-            <button
-              className="icon-button mobile-toggle"
-              aria-label="Open navigation"
-              onClick={() => setMobile(true)}
-            >
-              <Menu size={21} />
-            </button>
-            <span>Workspace</span>
-            <ChevronRight size={14} />
-            <strong>{navigation.find((n) => n.id === section)?.title}</strong>
-          </div>
-          <div className="topbar-right">
-            <HeaderSearch
-              onSearch={section === "files" ? searchTable : undefined}
-            />
-            <span className="top-divider" />
-            <div className="user-menu">
-              <span className="avatar">{initials(user.name)}</span>
-              <div>
-                <strong>{user.name}</strong>
-                <span>
-                  {user.role === "admin" ? "Administrator" : "Team member"}
-                </span>
-              </div>
-              <button
-                className="icon-button"
-                aria-label="Sign out"
-                title="Sign out"
-                disabled={action.busy}
-                onClick={() =>
-                  void action.run(async () => {
-                    await mutate("/auth/logout");
-                    router.replace("/login/");
-                  })
-                }
+            </div>
+            <div className="file-controls">
+              <SlidersHorizontal size={16} />
+              <SearchSelect
+                aria-label="Status filter"
+                value={filter}
+                onValueChange={(value) => {
+                  setFilter(value);
+                  setOffset(0);
+                }}
               >
-                <LogOut size={16} />
-              </button>
+                <option value="">All statuses</option>
+                {[
+                  "ready",
+                  "queued",
+                  "uploading",
+                  "verifying",
+                  "failed",
+                  ...(user.role === "admin" ? ["deleted"] : []),
+                ].map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </SearchSelect>
+              <SearchSelect
+                aria-label="File type filter"
+                value={fileType}
+                onValueChange={(value) => {
+                  setFileType(value);
+                  setOffset(0);
+                }}
+              >
+                <option value="">All types</option>
+                <option value="image/">Images</option>
+                <option value="video/">Videos</option>
+                <option value="audio/">Audio</option>
+                <option value="text/">Text</option>
+                <option value="application/">Documents & archives</option>
+              </SearchSelect>
+              <div className="segmented">
+                <button
+                  aria-label="List view"
+                  className={!grid ? "selected" : ""}
+                  onClick={() => setGrid(false)}
+                >
+                  <List size={18} />
+                </button>
+                <button
+                  aria-label="Grid view"
+                  className={grid ? "selected" : ""}
+                  onClick={() => setGrid(true)}
+                >
+                  <Grid2X2 size={18} />
+                </button>
+              </div>
             </div>
           </div>
-        </header>
-        <main className="main-content">
-          <div className="page-heading">
-            <div>
-              <div className="eyebrow">YOUR WORKSPACE, AT A GLANCE</div>
-              <h1>{title[0]}</h1>
-              <p>{title[1]}</p>
-            </div>
-            <div className="heading-actions">
-              {["files", "api-keys", "activity"].includes(section) && (
-                <label className="select-label">
-                  <Folder size={15} />
-                  <SearchSelect
-                    aria-label="Project filter"
-                    value={project}
-                    onValueChange={(value) => {
-                      setProject(value);
-                      setOffset(0);
-                    }}
-                  >
-                    {section !== "api-keys" && (
-                      <option value="">All projects</option>
-                    )}
-                    {(section === "api-keys"
-                      ? managedProjects
-                      : allProjects
-                    ).map((p) => (
-                      <option value={p.id} key={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </SearchSelect>
-                </label>
-              )}
-              {section === "projects" || section === "overview" ? (
-                <button
-                  className="button primary"
-                  onClick={() => {
-                    setEditing(undefined);
-                    setModal("project");
-                  }}
-                >
-                  <Plus size={17} />
-                  New project
-                </button>
-              ) : section === "api-keys" ? (
-                <button
-                  className="button primary"
-                  disabled={!project}
-                  onClick={() => setModal("key")}
-                >
-                  <Plus size={17} />
-                  Create API key
-                </button>
-              ) : section === "files" || section === "uploads" ? (
-                <button
-                  className="button primary"
-                  disabled={
-                    !settings.data?.features.uploads ||
-                    !allProjects.some((p) => p.role !== "viewer")
-                  }
-                  title={
-                    settings.data?.features.uploads
-                      ? "Upload to a project"
-                      : "Configure storage and encryption to enable uploads"
-                  }
-                  onClick={() => setModal("upload")}
-                >
-                  <CloudUpload size={17} />
-                  Upload files
-                </button>
-              ) : null}
-            </div>
-          </div>
-          <ErrorNotice
-            message={action.error || projects.error || settings.error}
+          <ErrorNotice message={assets.error} />
+          {assets.loading ? (
+            <Loading />
+          ) : assets.data?.items.length ? (
+            <>
+              <AssetList
+                assets={assets.data.items}
+                grid={grid}
+                onSelect={setSelectedAsset}
+              />
+            </>
+          ) : (
+            <Empty
+              title={
+                search || filter || fileType || offset
+                  ? "No matching assets"
+                  : "A fresh start for your files"
+              }
+              detail={
+                search || filter || fileType || offset
+                  ? "Try another name, status, or project."
+                  : "Choose a project and upload your first files."
+              }
+            />
+          )}
+          <Pagination
+            offset={offset}
+            count={assets.data?.items.length ?? 0}
+            pageSize={pageSize}
+            onChange={setOffset}
+            onPageSizeChange={resizePage}
           />
-          {section === "overview" && (
-            <>
-              <ErrorNotice message={overview.error} />
-              {overview.loading ? (
-                <Loading />
-              ) : (
-                overview.data && (
-                  <OverviewView
-                    backupEnabled={settings.data?.features.backups !== false}
-                    data={overview.data}
-                    health={health.data?.items}
-                    onProject={() => setModal("project")}
-                  />
-                )
-              )}
-            </>
-          )}
-          {section === "projects" && (
-            <>
-              <section className="panel collection-toolbar">
-                <div className="file-toolbar">
-                  <TableSearch
-                    label="Search projects"
-                    value={search}
-                    onChange={searchTable}
-                  />
-                  <SearchSelect
-                    aria-label="Project role filter"
-                    value={filter}
-                    onValueChange={filterTable}
-                  >
-                    <option value="">All roles</option>
-                    {["viewer", "editor", "manager"].map((r) => (
-                      <option key={r} value={r}>
-                        {r}
-                      </option>
-                    ))}
-                  </SearchSelect>
-                </div>
-              </section>
-              {projects.loading ? (
-                <Loading />
-              ) : filteredProjects.length ? (
-                <div className="project-grid">
-                  {filteredProjects
-                    .slice(offset, offset + pageSize)
-                    .map((p, i) => (
-                      <article className="panel project-card" key={p.id}>
-                        <div className="project-top">
-                          <span
-                            className={`project-symbol ${["violet", "blue", "peach", "mint"][i % 4]}`}
-                          >
-                            <Folder size={25} />
-                          </span>
-                          <Badge tone="neutral">{p.role}</Badge>
-                        </div>
-                        <h3>{p.name}</h3>
-                        <p>
-                          {p.description ||
-                            "A dedicated space for your application’s assets."}
-                        </p>
-                        <div className="project-stats">
-                          <span>
-                            <File size={14} />
-                            {p.files} files
-                          </span>
-                          <span>{bytes(p.used_bytes)}</span>
-                        </div>
-                        <div className="progress-track">
-                          <div
-                            style={{
-                              width: `${Math.min((p.used_bytes / p.quota_bytes) * 100, 100)}%`,
-                            }}
-                          />
-                        </div>
-                        <div className="project-capacity">
-                          {bytes(p.quota_bytes)} allocated
-                        </div>
-                        <div className="project-footer">
-                          <button
-                            className="text-link"
-                            onClick={() => setMembers(p)}
-                          >
-                            Members
-                            <ArrowRight size={14} />
-                          </button>
-                          {p.role === "manager" && (
-                            <button
-                              className="icon-button"
-                              aria-label={`Edit ${p.name}`}
-                              onClick={() => {
-                                setEditing(p);
-                                setModal("project");
-                              }}
-                            >
-                              <Settings2 size={17} />
-                            </button>
-                          )}
-                        </div>
-                      </article>
-                    ))}
-                </div>
-              ) : (
-                <section className="panel">
-                  <Empty
-                    title={
-                      search || filter
-                        ? "No matching projects"
-                        : "Make room for your first project"
-                    }
-                    detail="Projects keep each application’s assets and API permissions together."
-                    action={
-                      <button
-                        className="button primary"
-                        onClick={() => setModal("project")}
-                      >
-                        <Plus size={16} />
-                        Create a project
-                      </button>
-                    }
-                  />
-                </section>
-              )}
-              <Pagination
-                offset={offset}
-                count={filteredProjects.slice(offset, offset + pageSize).length}
-                pageSize={pageSize}
-                onChange={setOffset}
-                onPageSizeChange={resizePage}
-                hasMore={offset + pageSize < filteredProjects.length}
-              />
-            </>
-          )}
-          {section === "files" && (
-            <section className="panel">
-              <div className="file-toolbar">
-                <div className="search-field">
-                  <Search size={17} />
-                  <input
-                    aria-label="Search files"
-                    placeholder="Search by file name…"
-                    value={search}
-                    onChange={(e) => {
-                      setSearch(e.target.value);
-                      setOffset(0);
-                    }}
-                  />
-                  {search && (
-                    <button
-                      className="icon-button"
-                      onClick={() => searchTable("")}
-                      aria-label="Clear search"
-                    >
-                      <X size={15} />
-                    </button>
-                  )}
-                </div>
-                <div className="file-controls">
-                  <SlidersHorizontal size={16} />
-                  <SearchSelect
-                    aria-label="Status filter"
-                    value={filter}
-                    onValueChange={(value) => {
-                      setFilter(value);
-                      setOffset(0);
-                    }}
-                  >
-                    <option value="">All statuses</option>
-                    {[
-                      "ready",
-                      "queued",
-                      "uploading",
-                      "verifying",
-                      "failed",
-                      ...(user.role === "admin" ? ["deleted"] : []),
-                    ].map((v) => (
-                      <option key={v} value={v}>
-                        {v}
-                      </option>
-                    ))}
-                  </SearchSelect>
-                  <SearchSelect
-                    aria-label="File type filter"
-                    value={fileType}
-                    onValueChange={(value) => {
-                      setFileType(value);
-                      setOffset(0);
-                    }}
-                  >
-                    <option value="">All types</option>
-                    <option value="image/">Images</option>
-                    <option value="video/">Videos</option>
-                    <option value="audio/">Audio</option>
-                    <option value="text/">Text</option>
-                    <option value="application/">Documents & archives</option>
-                  </SearchSelect>
-                  <div className="segmented">
-                    <button
-                      aria-label="List view"
-                      className={!grid ? "selected" : ""}
-                      onClick={() => setGrid(false)}
-                    >
-                      <List size={18} />
-                    </button>
-                    <button
-                      aria-label="Grid view"
-                      className={grid ? "selected" : ""}
-                      onClick={() => setGrid(true)}
-                    >
-                      <Grid2X2 size={18} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <ErrorNotice message={assets.error} />
-              {assets.loading ? (
-                <Loading />
-              ) : assets.data?.items.length ? (
-                <>
-                  <AssetList
-                    assets={assets.data.items}
-                    grid={grid}
-                    onSelect={setSelectedAsset}
-                  />
-                </>
-              ) : (
-                <Empty
-                  title={
-                    search || filter || fileType || offset
-                      ? "No matching assets"
-                      : "A fresh start for your files"
-                  }
-                  detail={
-                    search || filter || fileType || offset
-                      ? "Try another name, status, or project."
-                      : "Choose a project and upload your first files."
-                  }
-                />
-              )}
-              <Pagination
-                offset={offset}
-                count={assets.data?.items.length ?? 0}
-                pageSize={pageSize}
-                onChange={setOffset}
-                onPageSizeChange={resizePage}
-              />
-              <div className="panel-note">
-                <ShieldCheck size={15} />
-                {settings.data?.features.backups === false
-                  ? "Files become ready after encrypted primary storage verification. Backups are disabled."
-                  : "Files become ready after encrypted storage and backup verification."}{" "}
-                Select a file to preview, download or manage its access.
-              </div>
-            </section>
-          )}
-          {section === "uploads" && (
-            <>
-              <div className="stats-row two">
-                <Stat
-                  label="Transfer limit"
-                  value="512 MB"
-                  icon={HardDrive}
-                  tone="violet"
-                  note="Maximum per asset"
-                />
-                <Stat
-                  label="Request parts"
-                  value="8 MB"
-                  icon={Layers3}
-                  tone="peach"
-                  note="Resumable transfer size"
-                />
-              </div>
-              <UploadHistory
-                projects={allProjects}
-                enabled={!!settings.data?.features.uploads}
-                onUpload={() => setModal("upload")}
-              />
-            </>
-          )}
-          {section === "api-keys" && (
-            <section className="panel">
-              <div className="panel-heading">
-                <div>
-                  <h2>Application access</h2>
-                  <p>
-                    Project-scoped credentials. Only the permissions you choose.
-                  </p>
-                </div>
-                <Badge tone="blue">
-                  {keys.data?.items.filter(
-                    (k) =>
-                      !k.revoked_at &&
-                      (!k.expires_at || new Date(k.expires_at) > new Date()),
-                  ).length ?? 0}{" "}
-                  active
-                </Badge>
-              </div>
-              <ErrorNotice message={keys.error} />
-              <div className="file-toolbar">
-                <TableSearch
-                  label="Search API keys"
-                  value={search}
-                  onChange={searchTable}
-                />
-                <SearchSelect
-                  aria-label="Key status filter"
-                  value={filter}
-                  onValueChange={filterTable}
-                >
-                  <option value="">All statuses</option>
-                  {["active", "revoked", "expired"].map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </SearchSelect>
-              </div>
-              {!project ? (
-                <Empty
-                  title="Create a project to connect an application"
-                  detail="Only project managers can issue and revoke application keys."
-                  action={
-                    <LinkAction href="/projects/">Go to projects</LinkAction>
-                  }
-                />
-              ) : keys.loading ? (
-                <Loading />
-              ) : filteredKeys.length ? (
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Key name</th>
-                        <th>Permissions</th>
-                        <th>Status</th>
-                        <th>Created</th>
-                        <th />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredKeys
-                        .slice(offset, offset + pageSize)
-                        .map((k) => (
-                          <tr key={k.id}>
-                            <td>
-                              <div className="key-name">
-                                <span className="file-icon blue">
-                                  <KeyRound size={19} />
-                                </span>
-                                <div>
-                                  <strong>{k.name}</strong>
-                                  <code>{k.prefix}••••••</code>
-                                </div>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="scope-list">
-                                {k.scopes.map((s) => (
-                                  <Badge key={s}>{s.split(":")[1]}</Badge>
-                                ))}
-                              </div>
-                            </td>
-                            <td>
-                              <Badge
-                                tone={
-                                  k.revoked_at
-                                    ? "neutral"
-                                    : k.expires_at &&
-                                        new Date(k.expires_at) < new Date()
-                                      ? "peach"
-                                      : "mint"
-                                }
-                              >
-                                {k.revoked_at
-                                  ? "Revoked"
-                                  : k.expires_at &&
-                                      new Date(k.expires_at) < new Date()
-                                    ? "Expired"
-                                    : "Active"}
-                              </Badge>
-                            </td>
-                            <td className="muted">{date(k.created_at)}</td>
-                            <td>
-                              {!k.revoked_at && (
-                                <button
-                                  className="button small danger"
-                                  disabled={action.busy}
-                                  onClick={() =>
-                                    void action.run(async () => {
-                                      await mutate(
-                                        `/api-keys/${k.id}?project_id=${project}`,
-                                        undefined,
-                                        "DELETE",
-                                      );
-                                      keys.refresh();
-                                    })
-                                  }
-                                >
-                                  Revoke
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <Empty
-                  title={
-                    search || filter
-                      ? "No matching API keys"
-                      : "Your applications are ready to connect"
-                  }
-                  detail="Create a key for this project. You’ll see its secret once."
-                  action={
-                    <button
-                      className="button primary"
-                      onClick={() => setModal("key")}
-                    >
-                      <Plus size={16} />
-                      Create API key
-                    </button>
-                  }
-                />
-              )}
-              <Pagination
-                offset={offset}
-                count={filteredKeys.slice(offset, offset + pageSize).length}
-                pageSize={pageSize}
-                onChange={setOffset}
-                onPageSizeChange={resizePage}
-                hasMore={offset + pageSize < filteredKeys.length}
-              />
-              <div className="panel-note">
-                <LockNote />
-                Keep API keys on your application server. Never include them in
-                frontend code.
-              </div>
-            </section>
-          )}
-          {section === "activity" && (
-            <section className="panel">
-              <div className="panel-heading">
-                <div>
-                  <h2>Workspace activity</h2>
-                  <p>Persistent audit events from your authorized projects.</p>
-                </div>
-                <Badge>Audit trail</Badge>
-              </div>
-              <ErrorNotice message={activity.error} />
-              <div className="file-toolbar">
-                <TableSearch
-                  label="Search activity"
-                  value={search}
-                  onChange={searchTable}
-                />
-                <SearchSelect
-                  aria-label="Activity action filter"
-                  value={filter}
-                  onValueChange={filterTable}
-                >
-                  <option value="">All actions</option>
-                  {[
-                    "project.",
-                    "member.",
-                    "key.",
-                    "upload.",
-                    "asset.",
-                    "auth.",
-                    "user.",
-                    "admin.",
-                  ].map((s) => (
-                    <option key={s} value={s}>
-                      {s.slice(0, -1)}
-                    </option>
-                  ))}
-                </SearchSelect>
-              </div>
-              {activity.loading ? (
-                <Loading />
-              ) : activity.data?.items.length ? (
-                <>
-                  <div className="activity-list">
-                    {activity.data.items.map((a) => (
-                      <div className="activity-row" key={a.id}>
-                        <span className="activity-symbol">
-                          <ActivityIcon size={18} />
-                        </span>
-                        <div className="activity-description">
-                          <strong>{a.action.replaceAll(".", " · ")}</strong>
-                          <p>{a.detail}</p>
-                          <span>{a.actor}</span>
-                        </div>
-                        <time>{date(a.created_at)}</time>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <Empty
-                  title={
-                    search || filter || project || offset
-                      ? "No matching activity"
-                      : "Your workspace history starts here"
-                  }
-                  detail="Project, membership, and API key changes appear automatically."
-                />
-              )}
-              <Pagination
-                offset={offset}
-                count={activity.data?.items.length ?? 0}
-                pageSize={pageSize}
-                onChange={setOffset}
-                onPageSizeChange={resizePage}
-              />
-            </section>
-          )}
-          {section === "settings" && (
-            <>
-              <div className="settings-grid">
-                <section className="panel">
-                  <div className="panel-heading">
-                    <div>
-                      <h2>Workspace</h2>
-                      <p>Your installation and signed-in account.</p>
-                    </div>
-                    <span className="file-icon blue">
-                      <Settings2 size={20} />
-                    </span>
-                  </div>
-                  <SettingsRow label="Workspace" value="AssetHub" />
-                  <SettingsRow label="Account" value={user.email} />
-                  <SettingsRow label="Role" value={user.role} />
-                  <SettingsRow
-                    label="Release"
-                    value={`${settings.data?.version ?? "0.1.0"} · ${settings.data?.phase ?? "foundation"}`}
-                  />
-                  <div className="panel-note">
-                    Deployment configuration is managed through environment
-                    variables.
-                  </div>
-                </section>
-                <section className="panel">
-                  <div className="panel-heading">
-                    <div>
-                      <h2>Storage design</h2>
-                      <p>Planned defaults for the ingestion phase.</p>
-                    </div>
-                    <span className="file-icon violet">
-                      <ShieldCheck size={20} />
-                    </span>
-                  </div>
-                  <SettingsRow
-                    label="Primary provider"
-                    value="Telegram Bot API"
-                  />
-                  <SettingsRow
-                    label="Encryption"
-                    value="AES-256-GCM per chunk"
-                  />
-                  <SettingsRow
-                    label="Maximum asset size"
-                    value={bytes(
-                      settings.data?.asset_limit_bytes ?? 512 * 1024 ** 2,
-                    )}
-                  />
-                  <SettingsRow
-                    label="Deleted backup retention"
-                    value={
-                      settings.data?.features.backups === false
-                        ? "Disabled"
-                        : `${settings.data?.backup_retention_days ?? 30} days`
-                    }
-                  />
-                  <div className="panel-note">
-                    {settings.data?.features.backups === false
-                      ? "Backups are disabled. Ready assets rely on primary storage. Deleted assets cannot be restored."
-                      : settings.data?.features.uploads
-                        ? "Uploads are enabled. New assets require verified encrypted primary storage and backup."
-                        : "Configure Telegram credentials and an encryption key to enable uploads. An independent backup is required."}
-                  </div>
-                </section>
-              </div>
-              {user.role === "admin" && (
-                <section className="panel team-panel">
-                  <div>
-                    <span className="file-icon mint">
-                      <ShieldCheck size={21} />
-                    </span>
-                    <div>
-                      <h2>Bring your team together</h2>
-                      <p>
-                        Invite an account, then grant access to individual
-                        projects.
-                      </p>
-                    </div>
-                  </div>
-                  <button className="button" onClick={() => setModal("invite")}>
-                    <Plus size={16} />
-                    Invite member
-                  </button>
-                </section>
-              )}
-              <section className="panel provider-panel">
-                <div className="panel-heading">
-                  <div>
-                    <h2>Service connections</h2>
-                    <p>
-                      Live dependency checks and explicit implementation status.
-                    </p>
-                  </div>
-                  <button
-                    className="text-link"
-                    onClick={() => health.refresh()}
-                    disabled={user.role !== "admin"}
-                  >
-                    Refresh
-                    <ArrowRight size={14} />
-                  </button>
-                </div>
-                {user.role === "admin" ? (
-                  <>
-                    <ErrorNotice message={health.error} />
-                    {health.loading ? (
-                      <Loading />
-                    ) : (
-                      health.data?.items.map((h) => (
-                        <div className="health-row" key={h.component}>
-                          <span className="health-icon">
-                            <Database size={19} />
+          <div className="panel-note">
+            <ShieldCheck size={15} />
+            {settings.data?.features.backups === false
+              ? "Files become ready after encrypted primary storage verification. Backups are disabled."
+              : "Files become ready after encrypted storage and backup verification."}{" "}
+            Select a file to preview, download or manage its access.
+          </div>
+        </section>
+      )}
+      {section === "uploads" && (
+        <>
+          <div className="stats-row two">
+            <Stat
+              label="Transfer limit"
+              value="512 MB"
+              icon={HardDrive}
+              tone="violet"
+              note="Maximum per asset"
+            />
+            <Stat
+              label="Request parts"
+              value="8 MB"
+              icon={Layers3}
+              tone="peach"
+              note="Resumable transfer size"
+            />
+          </div>
+          <UploadHistory
+            projects={allProjects}
+            enabled={!!settings.data?.features.uploads}
+            onUpload={() => setModal("upload")}
+          />
+        </>
+      )}
+      {section === "api-keys" && (
+        <section className="panel">
+          <div className="panel-heading">
+            <div>
+              <h2>Application access</h2>
+              <p>
+                Project-scoped credentials. Only the permissions you choose.
+              </p>
+            </div>
+            <Badge tone="blue">
+              {keys.data?.items.filter(
+                (k) =>
+                  !k.revoked_at &&
+                  (!k.expires_at || new Date(k.expires_at) > new Date()),
+              ).length ?? 0}{" "}
+              active
+            </Badge>
+          </div>
+          <ErrorNotice message={keys.error} />
+          <div className="file-toolbar">
+            <TableSearch
+              label="Search API keys"
+              value={search}
+              onChange={searchTable}
+            />
+            <SearchSelect
+              aria-label="Key status filter"
+              value={filter}
+              onValueChange={filterTable}
+            >
+              <option value="">All statuses</option>
+              {["active", "revoked", "expired"].map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </SearchSelect>
+          </div>
+          {!project ? (
+            <Empty
+              title="Create a project to connect an application"
+              detail="Only project managers can issue and revoke application keys."
+              action={<LinkAction href="/projects/">Go to projects</LinkAction>}
+            />
+          ) : keys.loading ? (
+            <Loading />
+          ) : filteredKeys.length ? (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Key name</th>
+                    <th>Permissions</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredKeys.slice(offset, offset + pageSize).map((k) => (
+                    <tr key={k.id}>
+                      <td>
+                        <div className="key-name">
+                          <span className="file-icon blue">
+                            <KeyRound size={19} />
                           </span>
                           <div>
-                            <strong>
-                              {h.component === "local"
-                                ? "Local development storage"
-                                : h.component === "telegram"
-                                  ? "Telegram storage"
-                                  : h.component === "redis"
-                                    ? "Redis queue"
-                                    : h.component === "backup"
-                                      ? "Independent backup"
-                                      : h.component === "worker"
-                                        ? "Background worker"
-                                        : h.component === "jobs"
-                                          ? "Durable jobs"
-                                          : "Staging filesystem"}
-                            </strong>
-                            <p>{h.detail}</p>
+                            <strong>{k.name}</strong>
+                            <code>{k.prefix}••••••</code>
                           </div>
-                          <Badge
-                            tone={
-                              h.status === "healthy"
-                                ? "mint"
-                                : h.status === "configured"
-                                  ? "blue"
-                                  : "peach"
+                        </div>
+                      </td>
+                      <td>
+                        <div className="scope-list">
+                          {k.scopes.map((s) => (
+                            <Badge key={s}>{s.split(":")[1]}</Badge>
+                          ))}
+                        </div>
+                      </td>
+                      <td>
+                        <Badge
+                          tone={
+                            k.revoked_at
+                              ? "neutral"
+                              : k.expires_at &&
+                                  new Date(k.expires_at) < new Date()
+                                ? "peach"
+                                : "mint"
+                          }
+                        >
+                          {k.revoked_at
+                            ? "Revoked"
+                            : k.expires_at &&
+                                new Date(k.expires_at) < new Date()
+                              ? "Expired"
+                              : "Active"}
+                        </Badge>
+                      </td>
+                      <td className="muted">{date(k.created_at)}</td>
+                      <td>
+                        {!k.revoked_at && (
+                          <button
+                            className="button small danger"
+                            disabled={action.busy}
+                            onClick={() =>
+                              void action.run(async () => {
+                                await mutate(
+                                  `/api-keys/${k.id}?project_id=${project}`,
+                                  undefined,
+                                  "DELETE",
+                                );
+                                keys.refresh();
+                              })
                             }
                           >
-                            {h.status.replaceAll("_", " ")}
-                          </Badge>
-                        </div>
-                      ))
-                    )}
-                  </>
-                ) : (
-                  <div className="panel-note">
-                    Detailed service health is available to installation
-                    administrators.
-                  </div>
-                )}
-              </section>
-            </>
+                            Revoke
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <Empty
+              title={
+                search || filter
+                  ? "No matching API keys"
+                  : "Your applications are ready to connect"
+              }
+              detail="Create a key for this project. You’ll see its secret once."
+              action={
+                <button
+                  className="button primary"
+                  onClick={() => setModal("key")}
+                >
+                  <Plus size={16} />
+                  Create API key
+                </button>
+              }
+            />
           )}
-          <footer className="dashboard-footer">
-            <span>
-              AssetHub <span>·</span> A home for every asset.
-            </span>
-            <span>
-              <ShieldCheck size={13} />
-              Your workspace. Your control.
-            </span>
-          </footer>
-        </main>
-      </div>
+          <Pagination
+            offset={offset}
+            count={filteredKeys.slice(offset, offset + pageSize).length}
+            pageSize={pageSize}
+            onChange={setOffset}
+            onPageSizeChange={resizePage}
+            hasMore={offset + pageSize < filteredKeys.length}
+          />
+          <div className="panel-note">
+            <LockNote />
+            Keep API keys on your application server. Never include them in
+            frontend code.
+          </div>
+        </section>
+      )}
+      {section === "activity" && (
+        <section className="panel">
+          <div className="panel-heading">
+            <div>
+              <h2>Workspace activity</h2>
+              <p>Persistent audit events from your authorized projects.</p>
+            </div>
+            <Badge>Audit trail</Badge>
+          </div>
+          <ErrorNotice message={activity.error} />
+          <div className="file-toolbar">
+            <TableSearch
+              label="Search activity"
+              value={search}
+              onChange={searchTable}
+            />
+            <SearchSelect
+              aria-label="Activity action filter"
+              value={filter}
+              onValueChange={filterTable}
+            >
+              <option value="">All actions</option>
+              {[
+                "project.",
+                "member.",
+                "key.",
+                "upload.",
+                "asset.",
+                "auth.",
+                "user.",
+                "admin.",
+              ].map((s) => (
+                <option key={s} value={s}>
+                  {s.slice(0, -1)}
+                </option>
+              ))}
+            </SearchSelect>
+          </div>
+          {activity.loading ? (
+            <Loading />
+          ) : activity.data?.items.length ? (
+            <>
+              <div className="activity-list">
+                {activity.data.items.map((a) => (
+                  <div className="activity-row" key={a.id}>
+                    <span className="activity-symbol">
+                      <ActivityIcon size={18} />
+                    </span>
+                    <div className="activity-description">
+                      <strong>{a.action.replaceAll(".", " · ")}</strong>
+                      <p>{a.detail}</p>
+                      <span>{a.actor}</span>
+                    </div>
+                    <time>{date(a.created_at)}</time>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <Empty
+              title={
+                search || filter || project || offset
+                  ? "No matching activity"
+                  : "Your workspace history starts here"
+              }
+              detail="Project, membership, and API key changes appear automatically."
+            />
+          )}
+          <Pagination
+            offset={offset}
+            count={activity.data?.items.length ?? 0}
+            pageSize={pageSize}
+            onChange={setOffset}
+            onPageSizeChange={resizePage}
+          />
+        </section>
+      )}
+      {section === "settings" && (
+        <>
+          <div className="settings-grid">
+            <section className="panel">
+              <div className="panel-heading">
+                <div>
+                  <h2>Workspace</h2>
+                  <p>Your installation and signed-in account.</p>
+                </div>
+                <span className="file-icon blue">
+                  <Settings2 size={20} />
+                </span>
+              </div>
+              <SettingsRow label="Workspace" value="AssetHub" />
+              <SettingsRow label="Account" value={user.email} />
+              <SettingsRow label="Role" value={user.role} />
+              <SettingsRow
+                label="Release"
+                value={`${settings.data?.version ?? "0.1.0"} · ${settings.data?.phase ?? "foundation"}`}
+              />
+              <div className="panel-note">
+                Deployment configuration is managed through environment
+                variables.
+              </div>
+            </section>
+            <section className="panel">
+              <div className="panel-heading">
+                <div>
+                  <h2>Storage design</h2>
+                  <p>Planned defaults for the ingestion phase.</p>
+                </div>
+                <span className="file-icon violet">
+                  <ShieldCheck size={20} />
+                </span>
+              </div>
+              <SettingsRow label="Primary provider" value="Telegram Bot API" />
+              <SettingsRow label="Encryption" value="AES-256-GCM per chunk" />
+              <SettingsRow
+                label="Maximum asset size"
+                value={bytes(
+                  settings.data?.asset_limit_bytes ?? 512 * 1024 ** 2,
+                )}
+              />
+              <SettingsRow
+                label="Deleted backup retention"
+                value={
+                  settings.data?.features.backups === false
+                    ? "Disabled"
+                    : `${settings.data?.backup_retention_days ?? 30} days`
+                }
+              />
+              <div className="panel-note">
+                {settings.data?.features.backups === false
+                  ? "Backups are disabled. Ready assets rely on primary storage. Deleted assets cannot be restored."
+                  : settings.data?.features.uploads
+                    ? "Uploads are enabled. New assets require verified encrypted primary storage and backup."
+                    : "Configure Telegram credentials and an encryption key to enable uploads. An independent backup is required."}
+              </div>
+            </section>
+          </div>
+          {user.role === "admin" && (
+            <section className="panel team-panel">
+              <div>
+                <span className="file-icon mint">
+                  <ShieldCheck size={21} />
+                </span>
+                <div>
+                  <h2>Bring your team together</h2>
+                  <p>
+                    Invite an account, then grant access to individual projects.
+                  </p>
+                </div>
+              </div>
+              <button className="button" onClick={() => setModal("invite")}>
+                <Plus size={16} />
+                Invite member
+              </button>
+            </section>
+          )}
+          <section className="panel provider-panel">
+            <div className="panel-heading">
+              <div>
+                <h2>Service connections</h2>
+                <p>
+                  Live dependency checks and explicit implementation status.
+                </p>
+              </div>
+              <button
+                className="text-link"
+                onClick={() => health.refresh()}
+                disabled={user.role !== "admin"}
+              >
+                Refresh
+                <ArrowRight size={14} />
+              </button>
+            </div>
+            {user.role === "admin" ? (
+              <>
+                <ErrorNotice message={health.error} />
+                {health.loading ? (
+                  <Loading />
+                ) : (
+                  health.data?.items.map((h) => (
+                    <div className="health-row" key={h.component}>
+                      <span className="health-icon">
+                        <Database size={19} />
+                      </span>
+                      <div>
+                        <strong>
+                          {h.component === "local"
+                            ? "Local development storage"
+                            : h.component === "telegram"
+                              ? "Telegram storage"
+                              : h.component === "redis"
+                                ? "Redis queue"
+                                : h.component === "backup"
+                                  ? "Independent backup"
+                                  : h.component === "worker"
+                                    ? "Background worker"
+                                    : h.component === "jobs"
+                                      ? "Durable jobs"
+                                      : "Staging filesystem"}
+                        </strong>
+                        <p>{h.detail}</p>
+                      </div>
+                      <Badge
+                        tone={
+                          h.status === "healthy"
+                            ? "mint"
+                            : h.status === "configured"
+                              ? "blue"
+                              : "peach"
+                        }
+                      >
+                        {h.status.replaceAll("_", " ")}
+                      </Badge>
+                    </div>
+                  ))
+                )}
+              </>
+            ) : (
+              <div className="panel-note">
+                Detailed service health is available to installation
+                administrators.
+              </div>
+            )}
+          </section>
+        </>
+      )}
       {modal === "project" && (
         <ProjectDialog
           project={editing}
@@ -1199,7 +984,7 @@ export default function Dashboard({ section }: { section: Section }) {
           onClose={() => setMembers(undefined)}
         />
       )}
-    </div>
+    </>
   );
 }
 function LockNote() {

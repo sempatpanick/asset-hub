@@ -4,9 +4,9 @@ import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 
 export function HeaderSearch({
-  onSearch,
+  onSearchSubmitted,
 }: {
-  onSearch?: (query: string) => void;
+  onSearchSubmitted?: () => void;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -38,8 +38,8 @@ export function HeaderSearch({
       role="search"
       onSubmit={(e) => {
         e.preventDefault();
-        if (onSearch) onSearch(query.trim());
-        else router.push(`/files/?q=${encodeURIComponent(query.trim())}`);
+        onSearchSubmitted?.();
+        router.push(`/files/?q=${encodeURIComponent(query.trim())}`);
       }}
     >
       <input

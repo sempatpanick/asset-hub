@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, request } from "@/infrastructure/api/client";
 export function useResource<T>(path: string | null, interval = 5000) {
@@ -96,17 +96,6 @@ export function useDebounced<T>(value: T, delay = 250) {
     return () => clearTimeout(timer);
   }, [value, delay]);
   return debounced;
-}
-const subscribeLocation = (listener: () => void) => {
-  window.addEventListener("popstate", listener);
-  return () => window.removeEventListener("popstate", listener);
-};
-export function useLocationQuery() {
-  return useSyncExternalStore(
-    subscribeLocation,
-    () => window.location.search,
-    () => "",
-  );
 }
 export function useAction() {
   const [busy, setBusy] = useState(false);
