@@ -35,17 +35,22 @@ test("project IDs and password-confirmed key copying persist after reload", asyn
     .first()
     .click();
   await page.getByLabel("Key name", { exact: true }).fill("Copyable key");
+  await selectOption(page, "Expires after", "No Expired");
   const creating = page.waitForResponse(
     (response) =>
       response.url().endsWith("/v1/api-keys") &&
       response.request().method() === "POST",
   );
   await page.getByRole("button", { name: "Create key", exact: true }).click();
-  const { secret, key } = (await (await creating).json()) as {
+  const creation = await creating;
+  expect(creation.status()).toBe(201);
+  expect(creation.request().postDataJSON().expires_at).toBeNull();
+  const { secret, key } = (await creation.json()) as {
     secret: string;
-    key: { id: string; secret_available: boolean };
+    key: { id: string; secret_available: boolean; expires_at: string | null };
   };
   expect(key.secret_available).toBe(true);
+  expect(key.expires_at).toBeNull();
   const dialog = page.getByRole("dialog");
   await expect(
     dialog.getByRole("heading", { name: "Save your API key" }),
@@ -103,6 +108,17 @@ test("project IDs and password-confirmed key copying persist after reload", asyn
   );
   expect(metadata.status()).toBe(200);
   expect(await metadata.text()).not.toContain(secret);
+  const persisted = (await metadata.json()) as {
+    items: { id: string; expires_at: string | null }[];
+  };
+  expect(
+    persisted.items.find((item) => item.id === key.id)?.expires_at,
+  ).toBeNull();
+  const keyAccess = await page.request.get(
+    `/v1/assets?project_id=${project.id}`,
+    { headers: { Authorization: `Bearer ${secret}` } },
+  );
+  expect(keyAccess.status()).toBe(200);
   await page.screenshot({
     path: ".local/screenshots/api-key-copy-desktop.png",
     fullPage: true,

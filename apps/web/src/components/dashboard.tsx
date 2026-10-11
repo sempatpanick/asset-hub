@@ -1672,9 +1672,12 @@ function KeyDialog({
                 project_id: project,
                 name,
                 scopes,
-                expires_at: new Date(
-                  Date.now() + Number(days) * 86400000,
-                ).toISOString(),
+                expires_at:
+                  days === "never"
+                    ? null
+                    : new Date(
+                        Date.now() + Number(days) * 86400000,
+                      ).toISOString(),
               });
               setCreatedKey(r.key);
               onSaved();
@@ -1728,6 +1731,7 @@ function KeyDialog({
               <option value="30">30 days</option>
               <option value="90">90 days</option>
               <option value="365">1 year</option>
+              <option value="never">No Expired</option>
             </SearchSelect>
           </label>
           <div className="modal-actions">

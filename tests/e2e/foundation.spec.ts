@@ -77,7 +77,20 @@ test("persistent dashboard, projects, keys and audit work", async ({
     .first()
     .click();
   await page.getByLabel("Key name").fill("Browser test key");
+  const creatingKey = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/v1/api-keys") &&
+      response.request().method() === "POST",
+  );
   await page.getByRole("button", { name: "Create key", exact: true }).click();
+  const keyResponse = await creatingKey;
+  expect(keyResponse.status()).toBe(201);
+  const { key } = (await keyResponse.json()) as {
+    key: { expires_at: string };
+  };
+  const expiry = Date.parse(key.expires_at);
+  expect(expiry).toBeGreaterThan(Date.now() + 89 * 86400000);
+  expect(expiry).toBeLessThanOrEqual(Date.now() + 90 * 86400000);
   await expect(
     page.getByRole("heading", { name: "Save your API key" }),
   ).toBeVisible();
