@@ -1,19 +1,15 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 import { selectOption } from "./select";
 
 test("project IDs and password-confirmed key copying persist after reload", async ({
   page,
   context,
+  signInAdmin,
 }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   const origin = "http://127.0.0.1:18080";
   const password = "local-browser-test-password";
-  const login = await page.request.post("/v1/auth/login", {
-    headers: { Origin: origin },
-    data: { email: "browser@example.test", password },
-  });
-  expect(login.status()).toBe(200);
-  const { csrf_token } = await login.json();
+  const csrf_token = await signInAdmin();
   const name = `Copy keys ${Date.now()}`;
   const createdProject = await page.request.post("/v1/projects", {
     headers: { Origin: origin, "X-CSRF-Token": csrf_token },

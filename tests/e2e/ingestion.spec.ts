@@ -1,5 +1,5 @@
 import { selectOption } from "./select";
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 test("multi-file upload persists through chunk verification and reload", async ({
   page,
 }) => {

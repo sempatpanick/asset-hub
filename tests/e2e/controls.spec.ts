@@ -1,22 +1,15 @@
 import { createHash } from "node:crypto";
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 import { selectOption } from "./select";
 
 test("searchable dropdowns scroll through real projects and tables page filtered history", async ({
   page,
+  signInAdmin,
 }) => {
   test.setTimeout(120000);
   const prefix = `Controls ${Date.now()}`;
   const origin = "http://127.0.0.1:18080";
-  const login = await page.request.post("/v1/auth/login", {
-    headers: { Origin: origin },
-    data: {
-      email: "browser@example.test",
-      password: "local-browser-test-password",
-    },
-  });
-  expect(login.ok()).toBe(true);
-  const { csrf_token } = await login.json();
+  const csrf_token = await signInAdmin();
   const headers = { Origin: origin, "X-CSRF-Token": csrf_token };
   const projects: { id: string; name: string }[] = [];
   for (let i = 0; i < 65; i++) {
@@ -154,18 +147,12 @@ test("searchable dropdowns scroll through real projects and tables page filtered
 
 test("header search and live pages reflect persistent changes from another client", async ({
   page,
+  signInAdmin,
 }) => {
   test.setTimeout(90000);
   const origin = "http://127.0.0.1:18080";
   const prefix = `Live ${Date.now()}`;
-  const login = await page.request.post("/v1/auth/login", {
-    headers: { Origin: origin },
-    data: {
-      email: "browser@example.test",
-      password: "local-browser-test-password",
-    },
-  });
-  const { csrf_token } = await login.json();
+  const csrf_token = await signInAdmin();
   const headers = { Origin: origin, "X-CSRF-Token": csrf_token };
   await page.goto("/projects/");
   await page.getByLabel("Search projects", { exact: true }).fill(prefix);

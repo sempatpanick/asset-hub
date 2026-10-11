@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { test, expect, type Page, type BrowserContext } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { test, expect } from "./fixtures";
 import { selectOption } from "./select";
 
 test.beforeAll(() => {
@@ -55,35 +56,10 @@ async function body(page: Page) {
       .textContent())!,
   );
 }
-let docsSession:
-  | {
-      cookies: Awaited<ReturnType<BrowserContext["cookies"]>>;
-      csrf: string;
-    }
-  | undefined;
-async function login(page: Page) {
-  // Reuse a real admin session across these isolated browser contexts so the
-  // broader suite stays within the production login limiter's ten attempts.
-  if (docsSession) {
-    await page.context().addCookies(docsSession.cookies);
-    return docsSession.csrf;
-  }
-  const response = await page.request.post("/v1/auth/login", {
-    headers: { Origin: "http://127.0.0.1:18080" },
-    data: {
-      email: "browser@example.test",
-      password: "local-browser-test-password",
-    },
-  });
-  expect(response.status()).toBe(200);
-  const csrf = (await response.json()).csrf_token as string;
-  docsSession = { cookies: await page.context().cookies(), csrf };
-  return csrf;
-}
-
 test("public API Docs cover every backend route and open from the workspace in a new tab", async ({
   page,
   context,
+  signInAdmin,
 }) => {
   test.setTimeout(90000);
   const server = readFileSync(
@@ -146,7 +122,7 @@ test("public API Docs cover every backend route and open from the workspace in a
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBe(true);
-  await login(page);
+  await signInAdmin();
   await page.goto("/");
   const link = page
     .getByRole("navigation", { name: "Main navigation" })
@@ -170,6 +146,7 @@ test("public API Docs cover every backend route and open from the workspace in a
 
 test("API Docs console sends real session and key requests, multipart and raw bytes, with live success and errors", async ({
   page,
+  signInAdmin,
 }) => {
   test.setTimeout(90000);
   const pageErrors: string[] = [];
@@ -182,7 +159,7 @@ test("API Docs console sends real session and key requests, multipart and raw by
   );
   await send(page, 401);
   expect((await body(page)).error.code).toBe("unauthorized");
-  await login(page);
+  await signInAdmin();
   await selectOption(page, "Console authentication", "Dashboard session");
   await send(page, 200);
   expect((await body(page)).asset_limit_bytes).toBe(536870912);

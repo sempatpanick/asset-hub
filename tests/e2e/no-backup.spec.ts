@@ -1,5 +1,5 @@
 import { selectOption } from "./select";
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 test("backups disabled allows real uploads and hides restore", async ({
   page,

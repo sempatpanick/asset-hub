@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 test("sidebar navigation preserves the shell and updates only page content", async ({
   page,
@@ -18,7 +18,7 @@ test("sidebar navigation preserves the shell and updates only page content", asy
       password: "local-browser-test-password",
     },
   });
-  expect(login.ok()).toBe(true);
+  expect(login.status(), await login.text()).toBe(200);
   await page.goto("/");
   await expect(
     page.getByRole("heading", { name: "Workspace overview", exact: true }),

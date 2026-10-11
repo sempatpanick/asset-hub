@@ -1,18 +1,11 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 test("invitation token is removed from the URL and creates a persistent account", async ({
   page,
+  signInAdmin,
 }) => {
   const email = `invited-${Date.now()}@example.test`;
   const password = "local-invitation-test-password";
-  const login = await page.request.post("/v1/auth/login", {
-    headers: { Origin: "http://127.0.0.1:18080" },
-    data: {
-      email: "browser@example.test",
-      password: "local-browser-test-password",
-    },
-  });
-  expect(login.ok()).toBe(true);
-  const { csrf_token } = await login.json();
+  const csrf_token = await signInAdmin();
   const invitation = await page.request.post("/v1/invitations", {
     headers: { "X-CSRF-Token": csrf_token, Origin: "http://127.0.0.1:18080" },
     data: { email, role: "member" },
