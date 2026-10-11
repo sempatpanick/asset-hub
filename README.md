@@ -35,6 +35,8 @@ The full contract is api/openapi.yaml and docs/API_SPEC.md. Detailed deployment,
 
 GitHub Actions verifies frontend/backend changes, publishes native ARM64 images to private GHCR packages and deploys to `/srv/projects/asset-hub` over the existing Cloudflare Access SSH connection. See [docs/GITHUB_ACTIONS.md](docs/GITHUB_ACTIONS.md) for repository secrets, one-time server preparation and release/recovery behavior. Main pushes deploy only after all required checks pass.
 
+For deployments built and verified on your own PC, use `pnpm run deploy:local`. It transfers ARM64 images directly over SSH and handles the Orange Pi rollout without Actions minutes or registry credentials. See [docs/LOCAL_DEPLOYMENT.md](docs/LOCAL_DEPLOYMENT.md).
+
 Use pnpm **12.10.1**, pinned by packageManager in package.json. Install that version with `npm install --global pnpm@12.10.1` if pnpm is not available. The workspace contains apps/web and packages/api-client; workspace dependencies always resolve locally.
 
 From the repository root: `pnpm install --frozen-lockfile`, `pnpm run generate:api`, `pnpm run format:check`, `pnpm run typecheck`, `pnpm run lint`, `pnpm run build`. Use `pnpm run format` to apply frontend/tooling formatting, `pnpm run dev` for the frontend on port 3005, `pnpm test` (or `pnpm run test:e2e`) for the browser suite and `pnpm audit --audit-level=high` for dependency checks. pnpm-lock.yaml is the dependency lockfile; update it deliberately with `pnpm install` when changing package manifests. Docker installs the pinned pnpm release and uses frozen workspace installation.

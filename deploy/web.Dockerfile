@@ -1,4 +1,4 @@
-FROM node:26.11.1-alpine3.23@sha256:f1394b3ffc021bc3f4aaf363e70a8d9667f7a9a63538bc824d7cc583129fffad AS build
+FROM --platform=$BUILDPLATFORM node:26.11.1-alpine3.23@sha256:f1394b3ffc021bc3f4aaf363e70a8d9667f7a9a63538bc824d7cc583129fffad AS build
 WORKDIR /src
 # Bootstrap the pinned package manager; all project installs use pnpm.
 RUN npm install --global pnpm@12.10.1

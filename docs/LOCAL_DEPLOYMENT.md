@@ -1,0 +1,23 @@
+# Local deployment to the Orange Pi
+
+Run `pnpm run deploy:local` manually from the project root on the local PC. Codex does not need to be open; keep the PC, Docker Desktop and internet connection available for the duration of the run. The runner fetches `origin/main` without changing your branch or uncommitted files. It compares that commit with the Orange Pi's active release and stays idle when they match. A release must descend from the current server commit; a rewritten main branch requires operator review.
+
+Local Docker Desktop builds and verifies the release, then creates Linux ARM64 application images. SSH transfers a checksummed image archive directly to the Pi. GitHub Actions minutes and registry credentials are not needed. The Pi loads the images, checks their exact IDs and architecture, prepares only AssetHub storage, runs migrations and waits for healthy services before promoting the release. The protected server `.env` and existing tunnel remain in place. The existing registry deployment mode remains available as a manual fallback.
+
+## Configuration
+
+Copy `scripts/local-deploy.example.json` to ignored `.local/local-deploy/config.json`. Set your Cloudflare SSH hostname, non-root user, identity file and installation directory. The default installation is `/srv/projects/asset-hub`. SSH requires a previously verified host key and noninteractive authentication. Cloudflare Access service-token credentials, when needed, belong in the local process environment rather than the JSON file or repository. Disposable database passwords are generated for each verification run and are never stored in the repository.
+
+The server must already have Docker Compose 2.24.4 or later, its protected `.env`, the established application data directories and Docker access for the deployment user. Existing backup policy is preserved; an enabled backup still requires an independent mount and marker. The runner refuses another application's published ports and serializes server rollouts with `deploy/.deployment-lock`. An interrupted rollout can leave that lock for operator review; do not remove it while a deployment is active.
+
+## Verification and manual deployment
+
+`pnpm run deploy:local:verify` checks the current working copy without deploying it. Regular deployments verify a frozen archive of the fetched main commit. Local deployment plumbing comes from this checkout and is included in the release checks and checksummed package; application code comes only from that archive. Keep these local helpers version controlled and review their changes.
+
+The disposable verification containers publish no host ports and never mount production data or the Docker socket. Checks cover generated API freshness, formatting, type checking, lint, deployment safeguards, workflow and shell validation, frontend build, backend build/vet, fresh race/unit/architecture/PostgreSQL/Redis tests, actual dump/restore recovery, ARM64 compilation, all main browser workflows, the separate backups-disabled browser workflow and production dependency audit. Skipped Go tests fail the release gate. Docker builds must also succeed before any server rollout begins.
+
+Evidence and release packages stay under ignored `.local/local-deploy/releases/COMMIT`. Each verification run removes only its own disposable Compose project. Neither a failed check nor a failed image build transfers a candidate to production. The source commit stays fixed throughout the run. Before rollout, the Pi also checks that its active release has not changed while verification was running.
+
+The local deployment runner has no schedule or background watcher. Each deployment starts only when you run the command. The previously created Codex automation has been canceled. The GitHub Deploy workflow is configured separately; disable it if you also want to stop deployments triggered through GitHub.
+
+Deployment does not reverse migrations or automatically restore databases. A migration failure keeps web/API/worker stopped; a health-check failure leaves the candidate unpromoted for inspection. Previous manifests are retained. Use the recovery procedure in `docs/OPERATIONS.md` after checking schema compatibility.

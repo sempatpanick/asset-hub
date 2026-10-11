@@ -14,7 +14,9 @@
     "test:e2e": "playwright test",
     "generate:api": "openapi-typescript api/openapi.yaml -o packages/api-client/src/schema.d.ts && pnpm run generate:docs",
     "generate:docs": "node scripts/generate-api-docs.mjs",
-    "test:deploy": "node --test tests/deploy/*.test.mjs"
+    "test:deploy": "node --test tests/deploy/*.test.mjs",
+    "deploy:local": "node scripts/local-deploy.mjs",
+    "deploy:local:verify": "node scripts/local-deploy.mjs --verify-current"
   },
   "devDependencies": {
     "@playwright/test": "1.64.0",

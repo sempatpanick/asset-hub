@@ -77,6 +77,10 @@ if [[ "$1" == login ]]; then
   IFS= read -r credential
   [[ "$credential" == test-only-registry-token ]]
 fi
+if [[ "$1 $2" == 'image inspect' ]]; then
+  if [[ "$*" == *'/backend:'* ]]; then task_id=1; else task_id=2; fi
+  printf 'sha256:%s linux/%s\\n' "$(printf '%064d' 0 | tr 0 "$task_id")" "${"${FAKE_ARCH:-arm64}"}"
+fi
 if [[ "$1" == ps && "${"${FAKE_PORT_CONFLICT:-0}"}" == 1 ]]; then echo 'other-worker|other-project'; fi
 if [[ "$*" == *'--exit-code-from migrate'* && "${"${FAKE_MIGRATION_FAILURE:-0}"}" == 1 ]]; then exit 7; fi
 `,
@@ -325,4 +329,76 @@ test("image tags follow committed service inputs and ignore unrelated docs", (t)
   commit();
   assert.equal(tag("backend"), secondBackend);
   assert.equal(tag("web"), firstWeb);
+});
+
+function localImages(f) {
+  writeFileSync(
+    join(f.directory, release, "images.env"),
+    `BACKEND_IMAGE=assethub-local/backend:${"a".repeat(40)}\nWEB_IMAGE=assethub-local/web:${"a".repeat(40)}\n`,
+  );
+  writeFileSync(
+    join(f.directory, release, "image-ids.env"),
+    `BACKEND_IMAGE_ID=sha256:${"1".repeat(64)}\nWEB_IMAGE_ID=sha256:${"2".repeat(64)}\n`,
+  );
+}
+
+test("local images require matching IDs and ARM64 architecture before any service stops", (t) => {
+  const f = fixture(t);
+  localImages(f);
+  const result = f.run("scripts/ci/deploy-release.sh", [release], {
+    DEPLOY_IMAGE_MODE: "local",
+    FAKE_ARCH: "amd64",
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /verified ARM64/);
+  assert.doesNotMatch(f.commands(), /stop --timeout|pull|login/);
+});
+
+test("local rollout pulls only infrastructure and preserves exact loaded application images", (t) => {
+  const f = fixture(t);
+  localImages(f);
+  const result = f.run("scripts/ci/deploy-release.sh", [release], {
+    DEPLOY_IMAGE_MODE: "local",
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(f.commands(), /pull storage-init postgres redis/);
+  assert.doesNotMatch(
+    f.commands(),
+    /login|pull storage-init postgres redis migrate/,
+  );
+  assert.match(f.commands(), /up -d --pull never --no-build.*api worker web/);
+  assert.equal(
+    readFileSync(join(f.directory, "deploy/current-release"), "utf8").trim(),
+    "a".repeat(40),
+  );
+});
+
+test("rollout keeps the server's existing backup policy", (t) => {
+  const f = fixture(t);
+  writeFileSync(
+    join(f.directory, "deploy/backup.env"),
+    "BACKUP_ENABLED=false\n",
+  );
+  const result = f.run("scripts/ci/deploy-release.sh", [release]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(
+    f.commands(),
+    /--env-file \.env --env-file deploy\/backup.env --env-file deploy\/releases\//,
+  );
+});
+
+test("changed active releases and concurrent deployments prevent rollout", (t) => {
+  const f = fixture(t);
+  writeFileSync(join(f.directory, "deploy/current-release"), "c".repeat(40));
+  const result = f.run("scripts/ci/deploy-release.sh", [release], {
+    DEPLOY_EXPECTED_RELEASE: "b".repeat(40),
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /active release changed/);
+  assert.equal(f.commands(), "");
+  mkdirSync(join(f.directory, "deploy/.deployment-lock"));
+  const locked = f.run("scripts/ci/deploy-release.sh", [release]);
+  assert.notEqual(locked.status, 0);
+  assert.match(locked.stderr, /Another deployment/);
+  assert.equal(f.commands(), "");
 });

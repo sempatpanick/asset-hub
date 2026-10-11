@@ -1,0 +1,34 @@
+# No host ports or application data. The runner shares this disposable network namespace.
+services:
+  postgres:
+    image: postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+    environment:
+      POSTGRES_USER: assethub
+      POSTGRES_PASSWORD: ${LOCAL_TEST_POSTGRES_PASSWORD:?Generate a disposable test password}
+    tmpfs: [/var/lib/postgresql]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U assethub"]
+      interval: 2s
+      retries: 30
+  redis:
+    image: redis:8.10.2-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
+    network_mode: service:postgres
+    command: [redis-server, --port, "56380", --save, "", --appendonly, "no"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test: [CMD, redis-cli, -p, "56380", ping]
+      interval: 2s
+      retries: 30
+  verify:
+    image: ${LOCAL_VERIFY_IMAGE:?Set the locally built verification image}
+    network_mode: service:postgres
+    depends_on:
+      redis: { condition: service_healthy }
+    environment:
+      TEST_DATABASE_URL: postgres://assethub:${LOCAL_TEST_POSTGRES_PASSWORD:?Generate a disposable test password}@127.0.0.1:5432/postgres?sslmode=disable
+      TEST_REDIS_URL: redis://127.0.0.1:56380/11
+      TEST_PG_DUMP_BINARY: /usr/bin/pg_dump
+      TEST_PG_RESTORE_BINARY: /usr/bin/pg_restore
+    volumes:
+      - ${LOCAL_EVIDENCE_DIRECTORY:?Set the local evidence directory}:/evidence

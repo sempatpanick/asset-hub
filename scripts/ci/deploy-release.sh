@@ -14,13 +14,45 @@ task_release=${1:?Specify the staged release directory}
   echo 'Prepare the protected installation .env on the server first.' >&2
   exit 1
 }
+mkdir -p deploy
+mkdir deploy/.deployment-lock 2> /dev/null || {
+  echo 'Another deployment is running, or its lock needs operator review.' >&2
+  exit 1
+}
+task_docker_config=''
+cleanup() {
+  if [[ -n "$task_docker_config" ]]; then rm -rf -- "$task_docker_config"; fi
+  rmdir -- deploy/.deployment-lock
+}
+trap cleanup EXIT
+if [[ ${DEPLOY_EXPECTED_RELEASE+x} ]]; then
+  task_current=''
+  if [[ -f deploy/current-release ]]; then task_current=$(cat deploy/current-release); fi
+  [[ "$task_current" == "$DEPLOY_EXPECTED_RELEASE" ]] || {
+    echo 'The active release changed while this candidate was being verified.' >&2
+    exit 1
+  }
+fi
+task_image_mode=${DEPLOY_IMAGE_MODE:-registry}
+case "$task_image_mode" in registry | local) ;; *)
+  echo 'Invalid image mode.' >&2
+  exit 1
+  ;;
+esac
 task_backend=''
 task_web=''
 while IFS='=' read -r task_key task_value; do
-  [[ "$task_value" =~ ^ghcr\.io/[a-z0-9._/-]+@(sha256:[a-f0-9]{64})$ ]] || {
-    echo 'Release images must be GHCR digests.' >&2
-    exit 1
-  }
+  if [[ "$task_image_mode" == registry ]]; then
+    [[ "$task_value" =~ ^ghcr\.io/[a-z0-9._/-]+@(sha256:[a-f0-9]{64})$ ]] || {
+      echo 'Release images must be GHCR digests.' >&2
+      exit 1
+    }
+  else
+    [[ "$task_value" =~ ^assethub-local/(backend|web):[a-f0-9]{40}$ && "${task_value##*:}" == "${task_release##*/}" ]] || {
+      echo 'Local images must match the staged release commit.' >&2
+      exit 1
+    }
+  fi
   case "$task_key" in
   BACKEND_IMAGE)
     [[ -z "$task_backend" ]] || exit 1
@@ -40,7 +72,33 @@ done < "$task_release/images.env"
   echo 'Both image digests are required.' >&2
   exit 1
 }
-task_compose=(docker compose --project-name assethub --env-file .env --env-file "$task_release/images.env"
+if [[ "$task_image_mode" == local ]]; then
+  task_backend_id=''
+  task_web_id=''
+  while IFS='=' read -r task_key task_value; do
+    [[ "$task_value" =~ ^sha256:[a-f0-9]{64}$ ]] || exit 1
+    case "$task_key" in
+    BACKEND_IMAGE_ID)
+      [[ -z "$task_backend_id" ]] || exit 1
+      task_backend_id=$task_value
+      ;;
+    WEB_IMAGE_ID)
+      [[ -z "$task_web_id" ]] || exit 1
+      task_web_id=$task_value
+      ;;
+    *) exit 1 ;;
+    esac
+  done < "$task_release/image-ids.env"
+  [[ -n "$task_backend_id" && -n "$task_web_id" ]] || exit 1
+  [[ $(docker image inspect --format '{{.Id}} {{.Os}}/{{.Architecture}}' "$task_backend") == "$task_backend_id linux/arm64" &&
+  $(docker image inspect --format '{{.Id}} {{.Os}}/{{.Architecture}}' "$task_web") == "$task_web_id linux/arm64" ]] || {
+    echo 'Loaded images do not match the verified ARM64 release.' >&2
+    exit 1
+  }
+fi
+task_compose=(docker compose --project-name assethub --env-file .env)
+if [[ -f deploy/backup.env ]]; then task_compose+=(--env-file deploy/backup.env); fi
+task_compose+=(--env-file "$task_release/images.env"
   -f "$task_release/compose.yaml" -f "$task_release/compose.production.yaml")
 if [[ -n "${DEPLOY_BACKUP_ENABLED:-}" ]]; then
   case "$DEPLOY_BACKUP_ENABLED" in true | false) export BACKUP_ENABLED="$DEPLOY_BACKUP_ENABLED" ;; *)
@@ -104,27 +162,31 @@ for task_port in "${task_http_port:-3005}" "${task_api_port:-8085}" "${task_post
     fi
   done <<< "$task_containers"
 done
-IFS= read -r task_token
-[[ -n "$task_token" && -n "${GHCR_USER:-}" ]] || {
-  echo 'Registry credentials are required.' >&2
-  exit 1
-}
-task_tmp_root=$(realpath -- "${TMPDIR:-/tmp}")
-task_docker_config=$(mktemp -d "$task_tmp_root/assethub-registry.XXXXXXXX")
-[[ $(realpath -- "$task_docker_config") == "$task_tmp_root"/assethub-registry.* ]] || exit 1
-export DOCKER_CONFIG="$task_docker_config"
-cleanup() { rm -rf -- "$task_docker_config"; }
-trap cleanup EXIT
-printf '%s\n' "$task_token" | docker login ghcr.io --username "$GHCR_USER" --password-stdin > /dev/null
-unset task_token
+if [[ "$task_image_mode" == registry ]]; then
+  IFS= read -r task_token
+  [[ -n "$task_token" && -n "${GHCR_USER:-}" ]] || {
+    echo 'Registry credentials are required.' >&2
+    exit 1
+  }
+  task_tmp_root=$(realpath -- "${TMPDIR:-/tmp}")
+  task_docker_config=$(mktemp -d "$task_tmp_root/assethub-registry.XXXXXXXX")
+  [[ $(realpath -- "$task_docker_config") == "$task_tmp_root"/assethub-registry.* ]] || exit 1
+  export DOCKER_CONFIG="$task_docker_config"
+  printf '%s\n' "$task_token" | docker login ghcr.io --username "$GHCR_USER" --password-stdin > /dev/null
+  unset task_token
+fi
 # Finish all downloads and preflight checks before stopping traffic/workers.
-"${task_compose[@]}" pull storage-init postgres redis migrate api worker web
-"${task_compose[@]}" up --no-build --no-deps --force-recreate --exit-code-from storage-init storage-init
-"${task_compose[@]}" up -d --no-build --wait --wait-timeout 180 postgres redis
+if [[ "$task_image_mode" == registry ]]; then
+  "${task_compose[@]}" pull storage-init postgres redis migrate api worker web
+else
+  "${task_compose[@]}" pull storage-init postgres redis
+fi
+"${task_compose[@]}" up --pull never --no-build --no-deps --force-recreate --exit-code-from storage-init storage-init
+"${task_compose[@]}" up -d --pull never --no-build --wait --wait-timeout 180 postgres redis
 # Quiesce mutation traffic before migrations. A failed migration keeps it stopped.
 "${task_compose[@]}" stop --timeout 45 web api worker
-"${task_compose[@]}" up --no-build --no-deps --force-recreate --exit-code-from migrate migrate
-"${task_compose[@]}" up -d --no-build --wait --wait-timeout 180 api worker web
+"${task_compose[@]}" up --pull never --no-build --no-deps --force-recreate --exit-code-from migrate migrate
+"${task_compose[@]}" up -d --pull never --no-build --wait --wait-timeout 180 api worker web
 # Promote the manifest only after the services are healthy. Previous releases remain.
 install -m 0644 "$task_release/compose.yaml" deploy/compose.yaml
 install -m 0644 "$task_release/compose.production.yaml" deploy/compose.production.yaml

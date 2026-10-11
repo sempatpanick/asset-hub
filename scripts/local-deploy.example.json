@@ -1,0 +1,8 @@
+{
+  "sshHost": "ssh.example.com",
+  "sshUser": "deploy",
+  "sshPort": 22,
+  "sshIdentityFile": "C:/Users/you/.ssh/id_ed25519",
+  "cloudflare": true,
+  "deployDirectory": "/srv/projects/asset-hub"
+}
