@@ -7,15 +7,15 @@ cleanup() {
   exit "$task_status"
 }
 trap cleanup EXIT
-# Check generated artifacts against their committed bytes without modifying the checkout.
-sha256sum packages/api-client/src/schema.d.ts apps/web/public/api-docs/openapi.{json,yaml} > .local/generated.sha256
+# Compare generated content consistently across Windows and Linux line endings.
+node scripts/ci/check-generated-api.mjs --snapshot .local/generated-api.json
 pnpm run generate:api
-sha256sum --check .local/generated.sha256
+node scripts/ci/check-generated-api.mjs --check .local/generated-api.json
 pnpm run format:check
-pnpm exec prettier --check scripts/local-deploy.mjs tests/deploy/local-deploy.test.mjs
+pnpm exec prettier --check scripts/local-deploy.mjs scripts/ci/check-generated-api.mjs tests/deploy/local-deploy.test.mjs
 pnpm run typecheck
 pnpm run lint
-pnpm exec eslint scripts/local-deploy.mjs --max-warnings 0
+pnpm exec eslint scripts/local-deploy.mjs scripts/ci/check-generated-api.mjs --max-warnings 0
 pnpm run test:deploy
 actionlint
 shfmt -d -i 2 -sr deploy/image-tags.sh deploy/compose-release.sh scripts/ci/*.sh

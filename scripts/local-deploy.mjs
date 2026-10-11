@@ -27,6 +27,7 @@ const plumbing = [
   "deploy/compose-release.sh",
   "scripts/local-deploy.mjs",
   "scripts/ci/local-verify.sh",
+  "scripts/ci/check-generated-api.mjs",
   "scripts/ci/deploy-release.sh",
   "tests/deploy/local-deploy.test.mjs",
   "tests/deploy/release.test.mjs",
@@ -72,6 +73,20 @@ export function sshArguments(config) {
     ...(config.cloudflare
       ? ["-o", "ProxyCommand=cloudflared access ssh --hostname %h"]
       : []),
+  ];
+}
+
+export function sourceArchiveArguments(sha, archive) {
+  if (!shaPattern.test(sha)) throw new Error("Invalid release commit.");
+  return [
+    "-c",
+    "core.autocrlf=false",
+    "-c",
+    "core.eol=lf",
+    "archive",
+    "--format=tar",
+    `--output=${archive}`,
+    sha,
   ];
 }
 
@@ -333,7 +348,7 @@ function main() {
     const source = join(evidence, "source");
     mkdirSync(source, { recursive: true });
     const archive = join(evidence, "source.tar");
-    execute("git", ["archive", "--format=tar", `--output=${archive}`, sha], {
+    execute("git", sourceArchiveArguments(sha, archive), {
       cwd: root,
     });
     execute("tar", ["-xf", archive, "-C", source], { cwd: root });

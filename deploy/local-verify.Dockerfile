@@ -25,6 +25,7 @@ COPY . .
 # Local deployment tooling is separate from the frozen application commit.
 COPY --from=automation deploy/local-verify.Dockerfile deploy/compose.local-verify.yaml ./deploy/
 COPY --from=automation scripts/local-deploy.mjs ./scripts/local-deploy.mjs
+COPY --from=automation scripts/ci/check-generated-api.mjs ./scripts/ci/check-generated-api.mjs
 COPY --from=automation scripts/ci/local-verify.sh scripts/ci/deploy-release.sh ./scripts/ci/
 COPY --from=automation tests/deploy/local-deploy.test.mjs ./tests/deploy/local-deploy.test.mjs
 COPY --from=automation tests/deploy/release.test.mjs ./tests/deploy/release.test.mjs

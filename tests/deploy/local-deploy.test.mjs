@@ -1,13 +1,25 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import {
   deployImages,
+  sourceArchiveArguments,
   validateConfig,
   verifySource,
 } from "../../scripts/local-deploy.mjs";
+import {
+  checkGeneratedAPI,
+  snapshotGeneratedAPI,
+} from "../../scripts/ci/check-generated-api.mjs";
 
 const root = resolve(".");
 const sha = "a".repeat(40);
@@ -147,4 +159,76 @@ test("a failing verifier always removes its isolated services", (t) => {
   const f = fixture(t, { failVerify: true });
   assert.throws(() => verifySource(f), /Verification failed/);
   assert.ok(f.calls.at(-1).args.includes("--volumes"));
+});
+
+test("generated API freshness accepts CRLF/LF differences but rejects changed content", (t) => {
+  const f = fixture(t);
+  const paths = [
+    "packages/api-client/src/schema.d.ts",
+    "apps/web/public/api-docs/openapi.json",
+    "apps/web/public/api-docs/openapi.yaml",
+  ];
+  const original = "first line\r\nsecond line\r\n";
+  for (const path of paths) {
+    mkdirSync(dirname(join(f.evidence, path)), { recursive: true });
+    writeFileSync(join(f.evidence, path), original);
+  }
+  const snapshot = snapshotGeneratedAPI(f.evidence);
+  for (const path of paths)
+    writeFileSync(join(f.evidence, path), original.replaceAll("\r\n", "\n"));
+  assert.doesNotThrow(() => checkGeneratedAPI(f.evidence, snapshot));
+
+  for (const path of paths) {
+    for (const content of [
+      "first line\nchanged contract\n",
+      "first line \nsecond line\n",
+      "first line\nsecond line",
+    ]) {
+      writeFileSync(join(f.evidence, path), content);
+      assert.throws(
+        () => checkGeneratedAPI(f.evidence, snapshot),
+        (error) => {
+          assert.ok(error.message.includes(path));
+          return /outdated/.test(error.message);
+        },
+      );
+    }
+    writeFileSync(join(f.evidence, path), original);
+  }
+});
+
+test("release archives retain LF content despite Windows Git line-ending settings", (t) => {
+  const f = fixture(t);
+  const run = (command, args) => {
+    const result = spawnSync(command, args, {
+      cwd: f.evidence,
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr || result.error?.message);
+    return result.stdout;
+  };
+  run("git", ["init", "--quiet"]);
+  run("git", ["config", "core.autocrlf", "true"]);
+  run("git", ["config", "core.eol", "crlf"]);
+  writeFileSync(join(f.evidence, "contract.txt"), "contract\r\nunchanged\r\n");
+  run("git", ["add", "contract.txt"]);
+  run("git", [
+    "-c",
+    "user.name=Deployment Test",
+    "-c",
+    "user.email=deployment@example.test",
+    "commit",
+    "--quiet",
+    "--no-gpg-sign",
+    "-m",
+    "Test line-ending conversion",
+  ]);
+  const commit = run("git", ["rev-parse", "HEAD"]).trim();
+  const archive = join(f.evidence, "source.tar");
+  run("git", sourceArchiveArguments(commit, archive));
+  assert.equal(
+    run("tar", ["-xOf", archive, "contract.txt"]),
+    "contract\nunchanged\n",
+  );
+  assert.throws(() => sourceArchiveArguments("invalid", archive), /Invalid/);
 });
