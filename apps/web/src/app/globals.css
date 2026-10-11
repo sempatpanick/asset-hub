@@ -1366,6 +1366,38 @@ tr:last-child td {
   align-items: center;
   gap: 11px;
 }
+.project-id {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px 23px;
+  font-size: 12px;
+}
+.project-id code {
+  overflow-wrap: anywhere;
+  white-space: normal;
+  user-select: all;
+  min-width: 0;
+}
+.project-id.compact {
+  padding: 0;
+  max-width: 200px;
+}
+.project-id .error {
+  width: 100%;
+}
+.key-row-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  white-space: normal;
+}
+.api-key-table .scope-list {
+  flex-wrap: wrap;
+  max-width: 220px;
+}
 .file-name strong,
 .key-name strong {
   font-size: 11px;

@@ -41,3 +41,29 @@ func TestAuthenticatedChunkAndEnvelopeBinding(t *testing.T) {
 		t.Fatal("reference substitution accepted")
 	}
 }
+
+func TestAPIKeySecretBinding(t *testing.T) {
+	a, _ := New(bytes.Repeat([]byte{9}, 32))
+	secret := []byte("ah_test-secret")
+	cipher, err := a.ProtectKeySecret("project-a", "key-a", secret)
+	if err != nil || bytes.Contains(cipher, secret) {
+		t.Fatal("secret not protected", err)
+	}
+	plain, err := a.OpenKeySecret("project-a", "key-a", cipher)
+	if err != nil || !bytes.Equal(plain, secret) {
+		t.Fatal("secret round trip failed", err)
+	}
+	for _, pair := range [][2]string{{"project-b", "key-a"}, {"project-a", "key-b"}} {
+		if _, err = a.OpenKeySecret(pair[0], pair[1], cipher); err == nil {
+			t.Fatal("secret substitution accepted")
+		}
+	}
+	other, _ := New(bytes.Repeat([]byte{8}, 32))
+	if _, err = other.OpenKeySecret("project-a", "key-a", cipher); err == nil {
+		t.Fatal("wrong installation key accepted")
+	}
+	cipher[len(cipher)-1] ^= 1
+	if _, err = a.OpenKeySecret("project-a", "key-a", cipher); err == nil {
+		t.Fatal("tampering accepted")
+	}
+}

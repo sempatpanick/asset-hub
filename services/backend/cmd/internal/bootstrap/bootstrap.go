@@ -136,6 +136,16 @@ func Wire(ctx context.Context, c Config) (*usecases.Service, func(), error) {
 		provider = &telegram.Provider{Transport: transport, ChannelID: c.ChannelID, Gate: &redisqueue.TelegramGate{Client: client}}
 	}
 	var crypto ports.Cryptography
+	var keySecrets ports.KeySecrets
+	if c.MasterKey != "" {
+		key, _ := hex.DecodeString(c.MasterKey)
+		keySecrets, err = cryptography.New(key)
+		clear(key)
+		if err != nil {
+			cleanup()
+			return nil, nil, fmt.Errorf("invalid API key encryption configuration")
+		}
+	}
 	if c.MasterKey != "" && (c.Provider == "local" || (c.BotToken != "" && c.ChannelID != "")) {
 		key, _ := hex.DecodeString(c.MasterKey)
 		crypto, err = cryptography.New(key)
@@ -150,6 +160,7 @@ func Wire(ctx context.Context, c Config) (*usecases.Service, func(), error) {
 	}
 	h := &runtimehealth.Health{Redis: client, BackupRoot: c.BackupRoot, Provider: provider, Backup: backup, BackupDisabled: c.BackupDisabled, StagingRoot: c.StagingRoot, CacheRoot: c.CacheRoot}
 	app := usecases.New(repo, security.Security{}, security.Clock{}, h)
+	app.SetKeySecrets(keySecrets)
 	app.SetIngestion(usecases.NewIngestion(app, repo, &filesystem.Staging{Root: c.StagingRoot, ReservePercent: &c.DiskReservePercent}, crypto, provider, backup, &redisqueue.Queue{Client: client}, c.StagingCapacity, validation.FileInspector{}))
 	var signer ports.ContentSigner
 	if c.SignedKey != "" {

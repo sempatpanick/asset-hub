@@ -97,6 +97,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	app.SetKeySecrets(crypto)
 	ingest := usecases.NewIngestion(app, repo, stage, crypto, primary, backup, &redisqueue.Queue{Client: redisClient}, 20<<30, validation.FileInspector{})
 	app.SetIngestion(ingest)
 	signer, _ := security.NewSigner(key)

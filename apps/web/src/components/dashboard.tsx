@@ -1,6 +1,6 @@
 "use client";
 import { SearchSelect } from "./select";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { useWorkspace, type Section } from "./workspace-shell";
@@ -38,7 +38,7 @@ import type {
   Overview,
   Project,
 } from "@assethub/api-client";
-import { mutate } from "@/infrastructure/api/client";
+import { mutate, request } from "@/infrastructure/api/client";
 import { bytes, useAction, useResource, useDebounced } from "@/features/hooks";
 import { Pagination, TableSearch } from "./table-controls";
 import { Badge, Empty, ErrorNotice, LinkAction, Loading, Modal } from "./ui";
@@ -93,6 +93,123 @@ async function copy(value: string) {
     throw new Error("Copy requires HTTPS. Select and copy the value manually.");
   await navigator.clipboard.writeText(value);
 }
+function ProjectID({
+  value,
+  compact = false,
+}: {
+  value: string;
+  compact?: boolean;
+}) {
+  const [copied, setCopied] = useState(false);
+  const action = useAction();
+  return (
+    <div className={`project-id${compact ? " compact" : ""}`}>
+      {!compact && <span>Project ID</span>}
+      <code>{value}</code>
+      <button
+        type="button"
+        className="button small"
+        aria-label={`Copy project ID ${value}`}
+        disabled={action.busy}
+        onClick={() =>
+          void action.run(async () => {
+            await copy(value);
+            setCopied(true);
+          })
+        }
+      >
+        {copied ? <Check size={14} /> : <Copy size={14} />}
+        {copied ? "Copied" : "Copy ID"}
+      </button>
+      <ErrorNotice message={action.error} />
+    </div>
+  );
+}
+function KeyCopyForm({
+  apiKey,
+  onClose,
+  closeLabel = "Cancel",
+  copyLabel = "Confirm and copy",
+}: {
+  apiKey: ApiKey;
+  onClose: () => void;
+  closeLabel?: string;
+  copyLabel?: string;
+}) {
+  const [password, setPassword] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [manualSecret, setManualSecret] = useState("");
+  const pending = useRef<AbortController | null>(null);
+  const action = useAction();
+  useEffect(() => () => pending.current?.abort(), []);
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (action.busy) return;
+        const confirmation = password;
+        setPassword("");
+        setManualSecret("");
+        setCopied(false);
+        void action.run(async () => {
+          const controller = new AbortController();
+          pending.current = controller;
+          const { secret } = await request<{ secret: string }>(
+            `/api-keys/${apiKey.id}/reveal?project_id=${encodeURIComponent(apiKey.project_id)}`,
+            {
+              method: "POST",
+              body: JSON.stringify({ password: confirmation }),
+              signal: AbortSignal.any([
+                controller.signal,
+                AbortSignal.timeout(15000),
+              ]),
+            },
+          );
+          controller.signal.throwIfAborted();
+          try {
+            await copy(secret);
+          } catch {
+            if (!controller.signal.aborted) setManualSecret(secret);
+            throw new Error(
+              "Clipboard access failed. Select and copy the verified key below.",
+            );
+          }
+          if (!controller.signal.aborted) setCopied(true);
+        });
+      }}
+    >
+      <ErrorNotice message={action.error} />
+      <label>
+        Dashboard password
+        <input
+          type="password"
+          autoFocus
+          required
+          maxLength={256}
+          autoComplete="current-password"
+          value={password}
+          disabled={action.busy}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+      </label>
+      {manualSecret && (
+        <div className="secret-box">
+          <code>{manualSecret}</code>
+        </div>
+      )}
+      {copied && <p role="status">API key copied.</p>}
+      <div className="modal-actions">
+        <button type="button" className="button" onClick={onClose}>
+          {copied ? "Done" : closeLabel}
+        </button>
+        <button className="button primary" disabled={action.busy || !password}>
+          <Copy size={16} />
+          {action.busy ? "Confirming…" : copyLabel}
+        </button>
+      </div>
+    </form>
+  );
+}
 
 export default function Dashboard({ section }: { section: Section }) {
   return (
@@ -127,6 +244,7 @@ function DashboardContent({
   >(null);
   const [editing, setEditing] = useState<Project>();
   const [selectedAsset, setSelectedAsset] = useState<Asset>();
+  const [copyingKey, setCopyingKey] = useState<ApiKey>();
   const [members, setMembers] = useState<Project>();
   const [search, setSearch] = useState(initialSearch);
   const query = useDebounced(search);
@@ -567,6 +685,7 @@ function DashboardContent({
             </Badge>
           </div>
           <ErrorNotice message={keys.error} />
+          {project && <ProjectID key={project} value={project} />}
           <div className="file-toolbar">
             <TableSearch
               label="Search API keys"
@@ -596,10 +715,11 @@ function DashboardContent({
             <Loading />
           ) : filteredKeys.length ? (
             <div className="table-wrap">
-              <table>
+              <table className="api-key-table">
                 <thead>
                   <tr>
                     <th>Key name</th>
+                    <th>Project ID</th>
                     <th>Permissions</th>
                     <th>Status</th>
                     <th>Created</th>
@@ -619,6 +739,9 @@ function DashboardContent({
                             <code>{k.prefix}••••••</code>
                           </div>
                         </div>
+                      </td>
+                      <td>
+                        <ProjectID value={k.project_id} compact />
                       </td>
                       <td>
                         <div className="scope-list">
@@ -648,24 +771,52 @@ function DashboardContent({
                       </td>
                       <td className="muted">{date(k.created_at)}</td>
                       <td>
-                        {!k.revoked_at && (
+                        <div className="key-row-actions">
                           <button
-                            className="button small danger"
-                            disabled={action.busy}
-                            onClick={() =>
-                              void action.run(async () => {
-                                await mutate(
-                                  `/api-keys/${k.id}?project_id=${project}`,
-                                  undefined,
-                                  "DELETE",
-                                );
-                                keys.refresh();
-                              })
+                            className="button small"
+                            aria-label={`Copy API key ${k.name}`}
+                            disabled={
+                              !k.secret_available ||
+                              !!k.revoked_at ||
+                              !!(
+                                k.expires_at &&
+                                new Date(k.expires_at) <= new Date()
+                              )
                             }
+                            title={
+                              !k.secret_available
+                                ? "This older key cannot be copied. Create a replacement key."
+                                : undefined
+                            }
+                            onClick={() => setCopyingKey(k)}
                           >
-                            Revoke
+                            <Copy size={14} />
+                            Copy API key
                           </button>
-                        )}
+                          {!k.secret_available && (
+                            <p className="form-help">
+                              Create a replacement to enable copying.
+                            </p>
+                          )}
+                          {!k.revoked_at && (
+                            <button
+                              className="button small danger"
+                              disabled={action.busy}
+                              onClick={() =>
+                                void action.run(async () => {
+                                  await mutate(
+                                    `/api-keys/${k.id}?project_id=${project}`,
+                                    undefined,
+                                    "DELETE",
+                                  );
+                                  keys.refresh();
+                                })
+                              }
+                            >
+                              Revoke
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -679,7 +830,7 @@ function DashboardContent({
                   ? "No matching API keys"
                   : "Your applications are ready to connect"
               }
-              detail="Create a key for this project. You’ll see its secret once."
+              detail="Create a key for this project. Confirm your dashboard password to copy it."
               action={
                 <button
                   className="button primary"
@@ -948,6 +1099,19 @@ function DashboardContent({
           onClose={() => setModal(null)}
           onSaved={() => keys.refresh()}
         />
+      )}
+      {copyingKey && (
+        <Modal
+          title="Copy API key"
+          detail={`Confirm your dashboard password to copy ${copyingKey.name}.`}
+          onClose={() => setCopyingKey(undefined)}
+        >
+          <ProjectID value={copyingKey.project_id} />
+          <KeyCopyForm
+            apiKey={copyingKey}
+            onClose={() => setCopyingKey(undefined)}
+          />
+        </Modal>
       )}
       {modal === "invite" && <InviteDialog onClose={() => setModal(null)} />}
       {modal === "upload" && (
@@ -1477,48 +1641,34 @@ function KeyDialog({
   const [name, setName] = useState("");
   const [scopes, setScopes] = useState(["assets:read"]);
   const [days, setDays] = useState("90");
-  const [secret, setSecret] = useState("");
-  const [copied, setCopied] = useState(false);
+  const [createdKey, setCreatedKey] = useState<ApiKey>();
   const action = useAction();
   return (
     <Modal
-      title={secret ? "Save your API key" : "Create API key"}
+      title={createdKey ? "Save your API key" : "Create API key"}
       detail={
-        secret
-          ? "This secret is shown once. Store it securely."
+        createdKey
+          ? "Confirm your dashboard password to copy this key. Store it securely."
           : "Restrict application access to this project."
       }
       onClose={onClose}
     >
-      {secret ? (
+      {createdKey ? (
         <>
-          <div className="secret-box">
-            <code>{secret}</code>
-          </div>
-          <ErrorNotice message={action.error} />
-          <div className="modal-actions">
-            <button
-              className="button"
-              onClick={() =>
-                void action.run(async () => {
-                  await copy(secret);
-                  setCopied(true);
-                })
-              }
-            >
-              {copied ? <Check size={16} /> : <Copy size={16} />}Copy secret
-            </button>
-            <button className="button primary" onClick={onClose}>
-              I’ve saved it
-            </button>
-          </div>
+          <ProjectID value={createdKey.project_id} />
+          <KeyCopyForm
+            apiKey={createdKey}
+            onClose={onClose}
+            closeLabel="I’ve saved it"
+            copyLabel="Copy secret"
+          />
         </>
       ) : (
         <form
           onSubmit={(e) => {
             e.preventDefault();
             void action.run(async () => {
-              const r = await mutate<{ secret: string }>("/api-keys", {
+              const r = await mutate<{ key: ApiKey }>("/api-keys", {
                 project_id: project,
                 name,
                 scopes,
@@ -1526,7 +1676,7 @@ function KeyDialog({
                   Date.now() + Number(days) * 86400000,
                 ).toISOString(),
               });
-              setSecret(r.secret);
+              setCreatedKey(r.key);
               onSaved();
             });
           }}

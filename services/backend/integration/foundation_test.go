@@ -2,11 +2,13 @@ package integration
 
 import (
 	"assethub/internal/adapters/inbound/httpapi"
+	"assethub/internal/adapters/outbound/cryptography"
 	"assethub/internal/adapters/outbound/postgres"
 	"assethub/internal/adapters/outbound/security"
 	"assethub/internal/application/usecases"
 	"assethub/internal/domain"
 	"assethub/migrations"
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -74,6 +76,8 @@ func TestPersistentFoundation(t *testing.T) {
 	}
 	defer repo.Pool.Close()
 	app := usecases.New(repo, sec, security.Clock{}, healthy{})
+	crypto, _ := cryptography.New(bytes.Repeat([]byte{5}, 32))
+	app.SetKeySecrets(crypto)
 	if err = app.Bootstrap(ctx, "admin@example.test", "Test Administrator", "integration-password-123"); err != nil {
 		t.Fatal(err)
 	}

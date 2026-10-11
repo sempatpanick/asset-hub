@@ -11,12 +11,15 @@ export function ApiGuide() {
       </p>
       <ol>
         <li>
-          Sign in to AssetHub, create a project and copy its id from the
-          Projects page or GET /v1/projects.
+          Sign in to AssetHub and create a project. Open API Keys, select that
+          project and copy its Project ID. You can also get the id from GET
+          /v1/projects.
         </li>
         <li>
           Open API Keys and create a key for that project. Choose only the
-          scopes your application needs and save the secret when shown.
+          scopes your application needs. Confirm your dashboard password to copy
+          the secret, then save it securely. Each key row also shows its Project
+          ID.
         </li>
         <li>
           Store that secret in your application’s server environment as
@@ -28,6 +31,13 @@ export function ApiGuide() {
           real request.
         </li>
       </ol>
+      <p>
+        To copy a key again, open API Keys and click its Copy API key button.
+        Each copy requires your dashboard password. Only project managers can
+        retrieve active keys. Older keys stored before this feature cannot be
+        recovered; create a replacement and update your application before
+        revoking the old key.
+      </p>
       <CodeBlock
         title="Server-side JavaScript: list your project’s files"
         code={`const baseUrl = "https://assets.example.com/v1";

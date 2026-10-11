@@ -199,9 +199,41 @@ export interface paths {
         put?: never;
         /**
          * Create a project API key
-         * @description Choose 1–4 distinct scopes. expires_at may be a future RFC3339 timestamp or null. Copy the secret now: it is returned only once and cannot be recovered. Keep it in your other project’s server environment.
+         * @description Choose 1–4 distinct scopes. expires_at may be a future RFC3339 timestamp or null. The secret is returned on creation. Project managers can retrieve new keys again after confirming their dashboard password. Keep it in your other project’s server environment.
          */
         post: operations["createKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api-keys/{id}/reveal": {
+        parameters: {
+            query: {
+                /**
+                 * @description The project id whose API keys you want to list, retrieve or revoke. Required even when the key id is supplied in the path.
+                 * @example 11111111-1111-4111-8111-111111111111
+                 */
+                project_id: components["parameters"]["ProjectID"];
+            };
+            header?: never;
+            path: {
+                /**
+                 * @description The key id copied from a create or list response.
+                 * @example 44444444-4444-4444-8444-444444444444
+                 */
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retrieve an API key after password confirmation
+         * @description Requires a dashboard session, project-manager permission, project_id and the signed-in user’s current password. Returns only active, unexpired keys created with encrypted secret storage. Older hash-only keys return 409 and need replacement. Every retrieval is audited without secrets. Password attempts are limited to ten per minute per signed-in account. Responses use Cache-Control: no-store. API keys cannot call this endpoint.
+         */
+        post: operations["revealKey"];
         delete?: never;
         options?: never;
         head?: never;
@@ -212,7 +244,7 @@ export interface paths {
         parameters: {
             query: {
                 /**
-                 * @description The project id whose API keys you want to list or revoke. Required even when the key id is supplied in the path.
+                 * @description The project id whose API keys you want to list, retrieve or revoke. Required even when the key id is supplied in the path.
                  * @example 11111111-1111-4111-8111-111111111111
                  */
                 project_id: components["parameters"]["ProjectID"];
@@ -775,6 +807,7 @@ export interface components {
          *       "project_id": "11111111-1111-4111-8111-111111111111",
          *       "name": "Website server",
          *       "prefix": "ah_example0",
+         *       "secret_available": true,
          *       "scopes": [
          *         "assets:read",
          *         "assets:write"
@@ -789,6 +822,8 @@ export interface components {
             project_id: string;
             name: string;
             prefix: string;
+            /** @description Whether this key has an encrypted secret available for password-confirmed retrieval. */
+            secret_available: boolean;
             scopes: string[];
             /** Format: date-time */
             expires_at: string | null;
@@ -876,7 +911,7 @@ export interface components {
         /** @example 11111111-1111-4111-8111-111111111111 */
         ID: string;
         /**
-         * @description The project id whose API keys you want to list or revoke. Required even when the key id is supplied in the path.
+         * @description The project id whose API keys you want to list, retrieve or revoke. Required even when the key id is supplied in the path.
          * @example 11111111-1111-4111-8111-111111111111
          */
         ProjectID: string;
@@ -2430,7 +2465,7 @@ export interface operations {
         parameters: {
             query: {
                 /**
-                 * @description The project id whose API keys you want to list or revoke. Required even when the key id is supplied in the path.
+                 * @description The project id whose API keys you want to list, retrieve or revoke. Required even when the key id is supplied in the path.
                  * @example 11111111-1111-4111-8111-111111111111
                  */
                 project_id: components["parameters"]["ProjectID"];
@@ -2455,6 +2490,7 @@ export interface operations {
                      *           "project_id": "11111111-1111-4111-8111-111111111111",
                      *           "name": "Website server",
                      *           "prefix": "ah_example0",
+                     *           "secret_available": true,
                      *           "scopes": [
                      *             "assets:read",
                      *             "assets:write"
@@ -2584,7 +2620,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Secret shown once */
+            /** @description New key and its secret */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -2597,6 +2633,7 @@ export interface operations {
                      *         "project_id": "11111111-1111-4111-8111-111111111111",
                      *         "name": "Website server",
                      *         "prefix": "ah_example0",
+                     *         "secret_available": true,
                      *         "scopes": [
                      *           "assets:read",
                      *           "assets:write"
@@ -2734,13 +2771,292 @@ export interface operations {
                     };
                 };
             };
+            /** @description Installation master key encryption is not configured */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "storage_unavailable",
+                     *         "message": "Required storage, backup or signing configuration is unavailable",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+        };
+    };
+    revealKey: {
+        parameters: {
+            query: {
+                /**
+                 * @description The project id whose API keys you want to list, retrieve or revoke. Required even when the key id is supplied in the path.
+                 * @example 11111111-1111-4111-8111-111111111111
+                 */
+                project_id: components["parameters"]["ProjectID"];
+            };
+            header: {
+                /** @description Required for session-authenticated mutations; Origin must match PUBLIC_ORIGIN. */
+                "X-CSRF-Token": string;
+                /**
+                 * @description Must match PUBLIC_ORIGIN for login, invitation acceptance and all session mutations. API-key mutations do not require it.
+                 * @example https://assets.example.com
+                 */
+                Origin: string;
+            };
+            path: {
+                /**
+                 * @description The key id copied from a create or list response.
+                 * @example 44444444-4444-4444-8444-444444444444
+                 */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "password": "YOUR_DASHBOARD_PASSWORD"
+                 *     }
+                 */
+                "application/json": {
+                    /** @description The signed-in user’s existing dashboard password. */
+                    password: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Password-confirmed API key secret */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "secret": "ah_example-only-not-a-working-key"
+                     *     }
+                     */
+                    "application/json": {
+                        secret: string;
+                    };
+                };
+            };
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Incorrect dashboard password or project-manager permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "incorrect_password",
+                     *         "message": "Incorrect dashboard password. Try again.",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "not_found",
+                     *         "message": "Resource not found",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Older key has no recoverable secret; create a replacement */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "key_secret_unavailable",
+                     *         "message": "This older key cannot be copied. Create a replacement key.",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Encrypted API key secret failed integrity verification */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "integrity_failed",
+                     *         "message": "File length or checksum verification failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Try again shortly */
+            429: {
+                headers: {
+                    /**
+                     * @description Wait this many seconds before retrying.
+                     * @example 60
+                     */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "rate_limited",
+                     *         "message": "Try again in one minute"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Installation master key encryption is not configured */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "storage_unavailable",
+                     *         "message": "Required storage, backup or signing configuration is unavailable",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
         };
     };
     revokeKey: {
         parameters: {
             query: {
                 /**
-                 * @description The project id whose API keys you want to list or revoke. Required even when the key id is supplied in the path.
+                 * @description The project id whose API keys you want to list, retrieve or revoke. Required even when the key id is supplied in the path.
                  * @example 11111111-1111-4111-8111-111111111111
                  */
                 project_id: components["parameters"]["ProjectID"];

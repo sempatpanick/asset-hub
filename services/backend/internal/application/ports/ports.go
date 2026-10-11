@@ -24,6 +24,7 @@ type Repository interface {
 	SetMember(context.Context, domain.Principal, string, string, string) error
 	Keys(context.Context, domain.Principal, string) ([]domain.APIKey, error)
 	CreateKey(context.Context, domain.Principal, domain.APIKey) error
+	KeySecret(context.Context, domain.Principal, string, string, time.Time) ([]byte, error)
 	RevokeKey(context.Context, domain.Principal, string, string) error
 	Overview(context.Context, domain.Principal) (domain.Overview, error)
 	Assets(context.Context, domain.Principal, string, string, string, string, int, int) ([]domain.Asset, error)
@@ -35,6 +36,10 @@ type Security interface {
 	HashToken(string) string
 	HashPassword(string) (string, error)
 	VerifyPassword(string, string) bool
+}
+type KeySecrets interface {
+	ProtectKeySecret(string, string, []byte) ([]byte, error)
+	OpenKeySecret(string, string, []byte) ([]byte, error)
 }
 type Clock interface{ Now() time.Time }
 type RuntimeHealth interface {

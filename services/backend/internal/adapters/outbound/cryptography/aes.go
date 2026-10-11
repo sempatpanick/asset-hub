@@ -10,6 +10,17 @@ import (
 
 type AES struct{ master []byte }
 
+func (a *AES) ProtectKeySecret(project, id string, data []byte) ([]byte, error) {
+	sealed, err := seal(a.master, data, "assethub:v1:api-key:"+project+":"+id)
+	return append([]byte{1}, sealed...), err
+}
+func (a *AES) OpenKeySecret(project, id string, data []byte) ([]byte, error) {
+	if len(data) < 1 || data[0] != 1 {
+		return nil, domain.ErrIntegrity
+	}
+	return open(a.master, data[1:], "assethub:v1:api-key:"+project+":"+id)
+}
+
 func New(master []byte) (*AES, error) {
 	if len(master) != 32 {
 		return nil, domain.ErrInvalid

@@ -59,6 +59,7 @@ func TestContentRangesCapabilitiesAndRecovery(t *testing.T) {
 	os.MkdirAll(backup.Root, 0700)
 	os.WriteFile(filepath.Join(backup.Root, ".assethub-backup"), []byte("fixture"), 0600)
 	crypto, _ := cryptography.New(bytes.Repeat([]byte{8}, 32))
+	app.SetKeySecrets(crypto)
 	signer, _ := security.NewSigner(bytes.Repeat([]byte{4}, 32))
 	primary := &filesystem.Local{Root: filepath.Join(root, "primary"), ReservePercent: &zero}
 	cache := &filesystem.Cache{Root: filepath.Join(root, "cache"), Capacity: 64 << 20, ReservePercent: &zero}

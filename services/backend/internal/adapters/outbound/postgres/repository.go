@@ -278,7 +278,7 @@ func (r *Repository) SetMember(ctx context.Context, p domain.Principal, project,
 	})
 }
 func (r *Repository) Keys(ctx context.Context, p domain.Principal, project string) ([]domain.APIKey, error) {
-	rows, err := r.Pool.Query(ctx, "SELECT id::text,project_id::text,name,prefix,scopes,expires_at,revoked_at,created_at FROM api_keys WHERE project_id::text=$1 ORDER BY created_at DESC", project)
+	rows, err := r.Pool.Query(ctx, "SELECT id::text,project_id::text,name,prefix,scopes,expires_at,revoked_at,created_at,encrypted_secret IS NOT NULL FROM api_keys WHERE project_id::text=$1 ORDER BY created_at DESC", project)
 	if err != nil {
 		return nil, err
 	}
@@ -286,7 +286,7 @@ func (r *Repository) Keys(ctx context.Context, p domain.Principal, project strin
 	result := []domain.APIKey{}
 	for rows.Next() {
 		var k domain.APIKey
-		if err = rows.Scan(&k.ID, &k.ProjectID, &k.Name, &k.Prefix, &k.Scopes, &k.ExpiresAt, &k.RevokedAt, &k.CreatedAt); err != nil {
+		if err = rows.Scan(&k.ID, &k.ProjectID, &k.Name, &k.Prefix, &k.Scopes, &k.ExpiresAt, &k.RevokedAt, &k.CreatedAt, &k.SecretAvailable); err != nil {
 			return nil, err
 		}
 		result = append(result, k)
@@ -295,12 +295,26 @@ func (r *Repository) Keys(ctx context.Context, p domain.Principal, project strin
 }
 func (r *Repository) CreateKey(ctx context.Context, p domain.Principal, k domain.APIKey) error {
 	return r.transaction(ctx, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, "INSERT INTO api_keys(id,project_id,name,prefix,token_hash,scopes,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7)", k.ID, k.ProjectID, k.Name, k.Prefix, k.Hash, k.Scopes, k.ExpiresAt)
+		_, err := tx.Exec(ctx, "INSERT INTO api_keys(id,project_id,name,prefix,token_hash,scopes,expires_at,encrypted_secret) VALUES($1,$2,$3,$4,$5,$6,$7,$8)", k.ID, k.ProjectID, k.Name, k.Prefix, k.Hash, k.Scopes, k.ExpiresAt, k.EncryptedSecret)
 		if err != nil {
 			return err
 		}
 		return audit(ctx, tx, p, "key.created", k.ProjectID, k.ID, k.Name)
 	})
+}
+func (r *Repository) KeySecret(ctx context.Context, p domain.Principal, project, id string, now time.Time) ([]byte, error) {
+	var encrypted []byte
+	err := r.transaction(ctx, func(tx pgx.Tx) error {
+		err := tx.QueryRow(ctx, "SELECT encrypted_secret FROM api_keys WHERE id::text=$1 AND project_id::text=$2 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>$3) FOR SHARE", id, project, now).Scan(&encrypted)
+		if err != nil {
+			return dbError(err)
+		}
+		if len(encrypted) == 0 {
+			return domain.ErrKeySecret
+		}
+		return audit(ctx, tx, p, "key.secret_accessed", project, id, "Password-confirmed secret access")
+	})
+	return encrypted, err
 }
 func (r *Repository) RevokeKey(ctx context.Context, p domain.Principal, project, id string) error {
 	return r.transaction(ctx, func(tx pgx.Tx) error {

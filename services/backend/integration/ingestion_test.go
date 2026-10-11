@@ -139,6 +139,7 @@ func TestDurableIngestion(t *testing.T) {
 	stage := &filesystem.Staging{ReservePercent: &reservePercent, Root: filepath.Join(root, "staging")}
 	backup := &filesystem.Backup{Root: backupRoot, StagingRoot: stage.Root, ReservePercent: &reservePercent}
 	crypto, _ := cryptography.New(bytes.Repeat([]byte{6}, 32))
+	app.SetKeySecrets(crypto)
 	primary := &failingPrimary{Local: filesystem.Local{ReservePercent: &reservePercent, Root: filepath.Join(root, "primary")}}
 	queue := &redisqueue.Queue{Client: client}
 	ingest := usecases.NewIngestion(app, repo, stage, crypto, primary, backup, queue, 2<<30, validation.FileInspector{})

@@ -13,6 +13,8 @@ var (
 	ErrForbidden    = errors.New("permission denied")
 	ErrInvalid      = errors.New("invalid input")
 	ErrConflict     = errors.New("already exists or expired")
+	ErrPassword     = errors.New("incorrect password")
+	ErrKeySecret    = errors.New("key secret unavailable")
 )
 
 type User struct {
@@ -53,6 +55,8 @@ type Invitation struct {
 }
 type APIKey struct {
 	ID, ProjectID, Name, Prefix, Hash string
+	EncryptedSecret                   []byte
+	SecretAvailable                   bool
 	Scopes                            []string
 	ExpiresAt, RevokedAt              *time.Time
 	CreatedAt                         time.Time

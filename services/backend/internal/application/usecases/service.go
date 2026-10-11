@@ -10,12 +10,15 @@ import (
 )
 
 type Service struct {
-	repo      ports.Repository
-	security  ports.Security
-	clock     ports.Clock
-	health    ports.RuntimeHealth
-	ingestion *Ingestion
+	repo       ports.Repository
+	security   ports.Security
+	clock      ports.Clock
+	health     ports.RuntimeHealth
+	ingestion  *Ingestion
+	keySecrets ports.KeySecrets
 }
+
+func (s *Service) SetKeySecrets(secrets ports.KeySecrets) { s.keySecrets = secrets }
 
 func New(repo ports.Repository, security ports.Security, clock ports.Clock, health ports.RuntimeHealth) *Service {
 	return &Service{repo: repo, security: security, clock: clock, health: health}
@@ -212,7 +215,47 @@ func (s *Service) CreateKey(ctx context.Context, p domain.Principal, project, na
 	}
 	secret := "ah_" + s.security.Token()
 	k := domain.APIKey{ID: s.security.ID(), ProjectID: project, Name: n, Prefix: secret[:11], Hash: s.security.HashToken(secret), Scopes: scopes, ExpiresAt: expiry, CreatedAt: s.clock.Now()}
+	if s.keySecrets == nil {
+		return domain.APIKey{}, "", domain.ErrUnavailable
+	}
+	k.EncryptedSecret, err = s.keySecrets.ProtectKeySecret(project, k.ID, []byte(secret))
+	if err != nil {
+		return domain.APIKey{}, "", err
+	}
+	k.SecretAvailable = true
 	return k, secret, s.repo.CreateKey(ctx, p, k)
+}
+func (s *Service) RevealKey(ctx context.Context, p domain.Principal, project, id, password string) (string, error) {
+	if p.KeyID != "" || p.User.ID == "" {
+		return "", domain.ErrForbidden
+	}
+	role, err := s.repo.ProjectRole(ctx, p, project)
+	if err != nil {
+		return "", err
+	}
+	if role != "manager" {
+		return "", domain.ErrForbidden
+	}
+	if len(password) == 0 || len(password) > 256 {
+		return "", domain.ErrPassword
+	}
+	u, err := s.repo.UserByEmail(ctx, p.User.Email)
+	if err != nil || u.ID != p.User.ID || u.Disabled || !s.security.VerifyPassword(u.PasswordHash, password) {
+		return "", domain.ErrPassword
+	}
+	if s.keySecrets == nil {
+		return "", domain.ErrUnavailable
+	}
+	encrypted, err := s.repo.KeySecret(ctx, p, project, id, s.clock.Now())
+	if err != nil {
+		return "", err
+	}
+	plain, err := s.keySecrets.OpenKeySecret(project, id, encrypted)
+	if err != nil {
+		return "", err
+	}
+	defer clear(plain)
+	return string(plain), nil
 }
 func (s *Service) RevokeKey(ctx context.Context, p domain.Principal, project, id string) error {
 	if _, err := s.Keys(ctx, p, project); err != nil {

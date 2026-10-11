@@ -12,7 +12,7 @@ Domain imports only Go standard library. Application imports domain and applicat
 
 ## Trust boundaries
 
-Nginx serves static pages and proxies `/v1` to Go. No API secrets enter a Next.js build. Go is authoritative for identity, authorization, validation and quotas. Session secrets and API keys are stored only as SHA-256 digests; passwords use Argon2id. Cookie-authenticated mutations require a CSRF header and matching configured origin. API keys cannot administer identities. Authorization precedes cache access and applies to queued work as well as HTTP. Unauthorized project objects are indistinguishable from missing objects.
+Nginx serves static pages and proxies `/v1` to Go. No API secrets enter a Next.js build. Go is authoritative for identity, authorization, validation and quotas. Session secrets and API key authentication use SHA-256 digests; passwords use Argon2id. New API key secrets also have versioned AES-GCM envelopes under the installation master key, bound to their project and key IDs. Project managers must confirm their current dashboard password for each secret retrieval; revoked, expired and legacy hash-only keys cannot be retrieved. Secret access is audited without credentials, and list responses contain only metadata. Cookie-authenticated mutations require a CSRF header and matching configured origin. API keys cannot administer identities or retrieve secrets. Authorization precedes cache access and applies to queued work as well as HTTP. Unauthorized project objects are indistinguishable from missing objects.
 
 ## Persistence and asynchronous work
 

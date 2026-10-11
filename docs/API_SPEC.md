@@ -19,7 +19,8 @@ All routes below are implemented. Uploads require configured storage and a wrapp
 | POST /v1/assets/{id}/restore      | Installation administrator restores retained backup                                                   |
 | GET, POST /v1/projects            | List authorized projects; create project and manager membership                                       |
 | PATCH /v1/projects/{id}           | Project manager updates name/description/quota                                                        |
-| GET, POST /v1/api-keys            | Authorized key metadata; create single-project scoped secret shown once                               |
+| GET, POST /v1/api-keys            | Authorized key metadata; create a single-project scoped secret                                        |
+| POST /v1/api-keys/{id}/reveal     | Session manager confirms current dashboard password to retrieve an active encrypted key secret        |
 | DELETE /v1/api-keys/{id}          | Revoke key immediately                                                                                |
 | GET /v1/storage/health            | Authorized, sanitized provider/backup health                                                          |
 

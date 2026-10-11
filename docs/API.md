@@ -4,12 +4,21 @@ Open **API Docs** from the workspace sidebar. It opens `/api-docs/` in a new tab
 the guide and reference are public, while API requests still enforce the caller’s
 authentication and permissions.
 
-The website documents all 35 HTTP operations: sessions, invitations, projects,
+The website documents all 36 HTTP operations: sessions, invitations, projects,
 memberships, API keys, files, resumable uploads, content, workspace settings,
 activity, dependency health, liveness and readiness. Each operation includes its
 access requirements, parameters, body fields, success examples and error examples.
 The guide explains server integrations, session CSRF, key scopes, pagination,
 upload progress, checksums, downloads, signed links, backup retention and retries.
+
+The API Keys dashboard shows the selected Project ID and the ID on each key row,
+with Copy ID buttons. Copy API key requires the signed-in user's existing dashboard
+password on every attempt, including immediately after creation. Project managers
+can retrieve active keys through `POST /v1/api-keys/{id}/reveal?project_id=...` with
+a session, CSRF token, matching Origin and a JSON `password`. New secrets are
+encrypted using the existing `ASSET_MASTER_KEY`; apply migration 00005 before
+running this version. Older hash-only keys remain usable but cannot be recovered:
+create a replacement, update the consuming application and then revoke the old key.
 
 The console sends requests to the same installation. Select a dashboard session,
 a project API key, or anonymous access. Session writes obtain the current CSRF

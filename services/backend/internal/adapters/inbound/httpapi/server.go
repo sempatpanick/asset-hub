@@ -75,6 +75,7 @@ func New(service *usecases.Service, origin string, secure bool, log *slog.Logger
 			r.Get("/api-keys", s.keys)
 			r.With(s.mutation).Post("/api-keys", s.createKey)
 			r.With(s.mutation).Delete("/api-keys/{id}", s.revokeKey)
+			r.With(s.mutation, s.authLimit).Post("/api-keys/{id}/reveal", s.revealKey)
 			r.Get("/overview", s.overview)
 			r.Get("/assets", s.assets)
 			r.Get("/activity", s.activity)
@@ -119,6 +120,10 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
 		status, code, message = 401, "unauthorized", "Invalid credentials or expired session"
 	case errors.Is(err, domain.ErrForbidden):
 		status, code, message = 403, "forbidden", "This action is not permitted"
+	case errors.Is(err, domain.ErrPassword):
+		status, code, message = 403, "incorrect_password", "Incorrect dashboard password. Try again."
+	case errors.Is(err, domain.ErrKeySecret):
+		status, code, message = 409, "key_secret_unavailable", "This older key cannot be copied. Create a replacement key."
 	case errors.Is(err, domain.ErrNotFound):
 		status, code, message = 404, "not_found", "Resource not found"
 	case errors.Is(err, domain.ErrInvalid):
@@ -202,6 +207,9 @@ func (s *Server) mutation(next http.Handler) http.Handler {
 func (s *Server) authLimit(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		host, _, _ := net.SplitHostPort(r.RemoteAddr)
+		if p, ok := r.Context().Value(principalKey{}).(domain.Principal); ok && p.User.ID != "" {
+			host = "password:" + p.User.ID
+		}
 		now := time.Now()
 		l := s.limiter
 		l.mu.Lock()
@@ -246,7 +254,22 @@ func assetView(a domain.Asset) any {
 	return map[string]any{"id": a.ID, "project_id": a.ProjectID, "name": a.Name, "mime": a.MIME, "size_bytes": a.Size, "sha256": a.SHA256, "status": a.Status, "visibility": a.Visibility, "created_at": a.CreatedAt}
 }
 func keyView(k domain.APIKey) any {
-	return map[string]any{"id": k.ID, "project_id": k.ProjectID, "name": k.Name, "prefix": k.Prefix, "scopes": k.Scopes, "expires_at": k.ExpiresAt, "revoked_at": k.RevokedAt, "created_at": k.CreatedAt}
+	return map[string]any{"id": k.ID, "project_id": k.ProjectID, "name": k.Name, "prefix": k.Prefix, "scopes": k.Scopes, "expires_at": k.ExpiresAt, "revoked_at": k.RevokedAt, "created_at": k.CreatedAt, "secret_available": k.SecretAvailable}
+}
+func (s *Server) revealKey(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Password string `json:"password"`
+	}
+	if err := decode(w, r, &body); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	secret, err := s.service.RevealKey(r.Context(), current(r), r.URL.Query().Get("project_id"), chi.URLParam(r, "id"), body.Password)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	reply(w, 200, map[string]string{"secret": secret})
 }
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	var body struct {
