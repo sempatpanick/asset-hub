@@ -17,7 +17,7 @@ pnpm run typecheck
 pnpm run lint
 pnpm exec eslint scripts/local-deploy.mjs scripts/ci/check-generated-api.mjs --max-warnings 0
 pnpm run test:deploy
-actionlint
+actionlint .github/workflows/*.yml
 shfmt -d -i 2 -sr deploy/image-tags.sh deploy/compose-release.sh scripts/ci/*.sh
 shellcheck deploy/image-tags.sh deploy/compose-release.sh scripts/ci/*.sh
 pnpm run build
