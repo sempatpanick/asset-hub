@@ -10,18 +10,46 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"sync"
 )
+
+// Keep the active count when the limit changes so lowering it never interrupts
+// existing requests or creates extra capacity while they are still running.
+type transferGate struct {
+	mu     sync.Mutex
+	active int
+}
+
+func (g *transferGate) acquire(limit int) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.active >= limit {
+		return false
+	}
+	g.active++
+	return true
+}
+
+func (g *transferGate) release() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.active--
+}
 
 func (s *Server) transferLimit(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		select {
-		case s.transfers <- struct{}{}:
-			defer func() { <-s.transfers }()
-			next.ServeHTTP(w, r)
-		default:
+		limit, err := s.service.UploadConcurrency(r.Context())
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		if !s.transfers.acquire(limit) {
 			w.Header().Set("Retry-After", "2")
 			reply(w, 429, map[string]any{"error": map[string]string{"code": "busy", "message": "Upload transfers are busy; retry shortly"}})
+			return
 		}
+		defer s.transfers.release()
+		next.ServeHTTP(w, r)
 	})
 }
 func (s *Server) ingest(w http.ResponseWriter, r *http.Request) *usecases.Ingestion {

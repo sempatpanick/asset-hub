@@ -2,21 +2,22 @@
 
 PostgreSQL is authoritative. UUIDs identify records; timestamps are UTC; sizes are BIGINT bytes. Versioned Goose migrations run before services. Mutations and their audit/outbox state commit atomically.
 
-| Table | Implemented purpose |
-|---|---|
-| users | Unique lowercase email, Argon2id hash, admin/member role and disabled flag |
-| invitations | Hashed single-use token, role, expiry and accepted timestamp |
-| sessions | Hashed cookie token, user FK, CSRF token and expiry |
-| projects | Name, description, creator and logical quota |
-| project_members | Unique project/user with manager/editor/viewer role |
-| api_keys | Scoped project key hash, visible prefix, expiry and revocation |
-| uploads | Reserved size, project/actor, name, optional expected hash, state, 24-hour expiry, completion lease and cleanup timestamps |
-| upload_parts | Immutable unique upload/index with exact size and SHA-256; staging paths derive from server UUID/index/hash |
-| assets | Detected MIME, original size/hash, lifecycle/visibility, upload/provider, versioned wrapped key, sanitized error, content version and deletion/backup-purge state |
-| asset_chunks | Unique asset/index, plaintext/ciphertext sizes, ciphertext hash, encrypted provider reference and best-effort purge status |
-| asset_jobs | Durable outbox/execution state for upload/deletion, attempts, next attempt, lease token and expiry |
-| audit_events | Actor, project/object, action, safe detail and timestamp |
-| installation_keys | Private master-key fingerprint preventing accidental wrapping-key replacement |
+| Table              | Implemented purpose                                                                                                                                               |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| users              | Unique lowercase email, Argon2id hash, admin/member role and disabled flag                                                                                        |
+| invitations        | Hashed single-use token, role, expiry and accepted timestamp                                                                                                      |
+| sessions           | Hashed cookie token, user FK, CSRF token and expiry                                                                                                               |
+| projects           | Name, description, creator and logical quota                                                                                                                      |
+| project_members    | Unique project/user with manager/editor/viewer role                                                                                                               |
+| api_keys           | Scoped project key hash, visible prefix, expiry and revocation                                                                                                    |
+| workspace_settings | Singleton row holding the concurrent upload limit (1–20, default 20); changes are audited                                                                         |
+| uploads            | Reserved size, project/actor, name, optional expected hash, state, 24-hour expiry, completion lease and cleanup timestamps                                        |
+| upload_parts       | Immutable unique upload/index with exact size and SHA-256; staging paths derive from server UUID/index/hash                                                       |
+| assets             | Detected MIME, original size/hash, lifecycle/visibility, upload/provider, versioned wrapped key, sanitized error, content version and deletion/backup-purge state |
+| asset_chunks       | Unique asset/index, plaintext/ciphertext sizes, ciphertext hash, encrypted provider reference and best-effort purge status                                        |
+| asset_jobs         | Durable outbox/execution state for upload/deletion, attempts, next attempt, lease token and expiry                                                                |
+| audit_events       | Actor, project/object, action, safe detail and timestamp                                                                                                          |
+| installation_keys  | Private master-key fingerprint preventing accidental wrapping-key replacement                                                                                     |
 
 Encrypted recovery manifests live on the independent backup filesystem; no plaintext channel/message/file locators or token-bearing download URLs are persisted. Ciphertext carries its random 12-byte nonce plus a 16-byte AES-GCM authentication tag. Key envelopes start with version 1.
 

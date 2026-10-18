@@ -8,7 +8,13 @@ fi
 task_root=$PWD
 task_binary="$task_root/.local/browser-fixture"
 (cd services/backend && go build -o "$task_binary" ./integration/preview)
-(cd services/backend && exec "$task_binary") > .local/browser-fixture.log 2>&1 &
+(
+  cd services/backend
+  if [[ -n ${BROWSER_FIXTURE_TMPDIR:-} ]]; then
+    export TMPDIR=$BROWSER_FIXTURE_TMPDIR
+  fi
+  exec "$task_binary"
+) > .local/browser-fixture.log 2>&1 &
 task_pid=$!
 cleanup() {
   task_status=$?

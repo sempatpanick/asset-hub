@@ -43,6 +43,7 @@ import { bytes, useAction, useResource, useDebounced } from "@/features/hooks";
 import { Pagination, TableSearch } from "./table-controls";
 import { Badge, Empty, ErrorNotice, LinkAction, Loading, Modal } from "./ui";
 import { UploadDialog, UploadHistory } from "./uploads";
+import { UploadSettings } from "./upload-settings";
 import { AssetDetails, safeImage, assetContent } from "./asset-details";
 
 const headings: Record<Section, [string, string]> = {
@@ -936,6 +937,7 @@ function DashboardContent({
       )}
       {section === "settings" && (
         <>
+          {settings.data && <UploadSettings settings={settings.data} />}
           <div className="settings-grid">
             <section className="panel">
               <div className="panel-heading">
@@ -1123,6 +1125,7 @@ function DashboardContent({
               : ""
           }
           userID={user.id}
+          concurrency={settings.data?.upload_concurrency ?? 1}
           onClose={() => setModal(null)}
           onSaved={refresh}
         />

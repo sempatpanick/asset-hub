@@ -219,8 +219,10 @@ curl -b cookies.txt 'https://assets.example.com/v1/projects'`}
         30 days and a workspace admin may restore it when quota allows. Without
         backups, retention is 0 and restoration returns 503. Keep the deleted
         asset id; workspace admins can use GET /assets?status=deleted to list
-        deleted metadata. GET /settings reports actual feature availability; it
-        is read-only.
+        deleted metadata. GET /settings reports actual feature availability and
+        upload_concurrency. Administrators can use PATCH /settings or the
+        dashboard Settings page to save an upload limit from 1 to 20 (default
+        20).
       </p>
       <h2>Pagination, search and updates</h2>
       <p>
@@ -310,8 +312,10 @@ curl -b cookies.txt 'https://assets.example.com/v1/projects'`}
               <td>
                 Wait for Retry-After seconds. Login/invitation acceptance share
                 10 attempts/minute per client address and 2 concurrent requests;
-                upload transfers and content streams each allow 4 concurrent
-                requests per API process.
+                upload transfers allow 1–20 concurrent requests per API process
+                (default 20), configured by an administrator in Settings.
+                Content streams allow 4 concurrent requests. Lowering the upload
+                limit lets active transfers finish before admitting new ones.
               </td>
             </tr>
             <tr>

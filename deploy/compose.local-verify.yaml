@@ -26,9 +26,13 @@ services:
     depends_on:
       redis: { condition: service_healthy }
     environment:
+      BROWSER_FIXTURE_TMPDIR: /browser-fixtures
       TEST_DATABASE_URL: postgres://assethub:${LOCAL_TEST_POSTGRES_PASSWORD:?Generate a disposable test password}@127.0.0.1:5432/postgres?sslmode=disable
       TEST_REDIS_URL: redis://127.0.0.1:56380/11
       TEST_PG_DUMP_BINARY: /usr/bin/pg_dump
       TEST_PG_RESTORE_BINARY: /usr/bin/pg_restore
+    # Browser scratch files are disposable, like the test database. Keep their
+    # fsync calls independent of Docker Desktop's shared virtual-disk latency.
+    tmpfs: ["/browser-fixtures:rw,nosuid,nodev,noexec,size=512m,mode=0700"]
     volumes:
       - ${LOCAL_EVIDENCE_DIRECTORY:?Set the local evidence directory}:/evidence

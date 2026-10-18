@@ -13,12 +13,14 @@ export function UploadDialog({
   projects,
   project,
   userID,
+  concurrency,
   onClose,
   onSaved,
 }: {
   projects: Project[];
   project: string;
   userID: string;
+  concurrency: number;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -65,11 +67,12 @@ export function UploadDialog({
     active.current = controller;
     setBusy(true);
     setError("");
-    for (const transfer of transfers.filter((v) => v.status !== "queued")) {
+    const pending = transfers.filter((v) => v.status !== "queued");
+    const uploadFile = async (transfer: Transfer) => {
       const file = transfer.file;
       const key = `assethub:upload:${userID}:${selected}:${encodeURIComponent(file.name)}:${file.size}:${file.lastModified}`;
       try {
-        if (controller.signal.aborted) break;
+        if (controller.signal.aborted) return;
         update(file, { status: "uploading", error: undefined });
         let upload: Upload | undefined;
         const id = localStorage.getItem(key);
@@ -155,9 +158,26 @@ export function UploadDialog({
               ? e.message
               : "Upload failed",
         });
-        if (paused) break;
       }
-    }
+    };
+    let next = 0;
+    const worker = async () => {
+      while (!controller.signal.aborted && next < pending.length) {
+        const transfer = pending[next++];
+        await uploadFile(transfer);
+      }
+    };
+    await Promise.all(
+      Array.from(
+        {
+          length: Math.min(
+            pending.length,
+            Math.max(1, Math.min(20, concurrency)),
+          ),
+        },
+        worker,
+      ),
+    );
     active.current = null;
     setBusy(false);
   };
@@ -264,9 +284,10 @@ export function UploadDialog({
         </button>
       </div>
       <p className="upload-hint">
-        Transfer progress tracks your browser upload. Storage is complete only
-        when the asset is marked ready. To resume after closing this window,
-        select the same files and project.
+        Up to {concurrency} files upload at the same time. Transfer progress
+        tracks your browser upload. Storage is complete only when the asset is
+        marked ready. To resume after closing this window, select the same files
+        and project.
       </p>
     </Modal>
   );

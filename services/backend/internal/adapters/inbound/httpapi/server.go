@@ -26,7 +26,7 @@ type Server struct {
 	secure         bool
 	log            *slog.Logger
 	limiter        *limiter
-	transfers      chan struct{}
+	transfers      transferGate
 	streams        chan struct{}
 }
 type bucket struct {
@@ -44,7 +44,7 @@ func New(service *usecases.Service, origin string, secure bool, log *slog.Logger
 	if secure {
 		cookie = "__Host-ah_session"
 	}
-	s := &Server{service: service, origin: origin, cookie: cookie, secure: secure, log: log, limiter: &limiter{items: map[string]bucket{}, active: make(chan struct{}, 2)}, transfers: make(chan struct{}, 4), streams: make(chan struct{}, 4)}
+	s := &Server{service: service, origin: origin, cookie: cookie, secure: secure, log: log, limiter: &limiter{items: map[string]bucket{}, active: make(chan struct{}, 2)}, streams: make(chan struct{}, 4)}
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID, middleware.Recoverer, s.headers)
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) { reply(w, 200, map[string]any{"status": "alive"}) })
@@ -81,6 +81,7 @@ func New(service *usecases.Service, origin string, secure bool, log *slog.Logger
 			r.Get("/activity", s.activity)
 			r.Get("/storage/health", s.health)
 			r.Get("/settings", s.settings)
+			r.With(s.mutation).Patch("/settings", s.updateSettings)
 			r.Get("/uploads", s.uploads)
 			r.Get("/uploads/{id}", s.upload)
 			r.Get("/assets/{id}", s.asset)
@@ -529,7 +530,31 @@ func (s *Server) settings(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, domain.ErrForbidden)
 		return
 	}
-	reply(w, 200, map[string]any{"name": "AssetHub", "version": "0.3.0", "phase": "content", "features": map[string]bool{"uploads": s.service.Ingestion().Enabled(), "content": s.service.Ingestion().ContentEnabled(), "projects": true, "api_keys": true, "invitations": current(r).IsAdmin(), "backups": s.service.Ingestion().BackupEnabled()}, "storage_provider": s.service.Ingestion().ProviderName(), "asset_limit_bytes": 512 << 20, "upload_part_bytes": 8 << 20, "storage_chunk_bytes": 16 << 20, "backup_retention_days": s.service.Ingestion().BackupRetentionDays(), "signed_url_seconds": 900, "encryption": "AES-256-GCM", "editable": false})
+	limit, err := s.service.UploadConcurrency(r.Context())
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	reply(w, 200, map[string]any{"name": "AssetHub", "version": "0.3.0", "phase": "content", "features": map[string]bool{"uploads": s.service.Ingestion().Enabled(), "content": s.service.Ingestion().ContentEnabled(), "projects": true, "api_keys": true, "invitations": current(r).IsAdmin(), "backups": s.service.Ingestion().BackupEnabled()}, "storage_provider": s.service.Ingestion().ProviderName(), "asset_limit_bytes": 512 << 20, "upload_part_bytes": 8 << 20, "storage_chunk_bytes": 16 << 20, "backup_retention_days": s.service.Ingestion().BackupRetentionDays(), "signed_url_seconds": 900, "encryption": "AES-256-GCM", "upload_concurrency": limit, "editable": current(r).IsAdmin()})
+}
+
+func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
+	if !current(r).IsAdmin() {
+		s.fail(w, r, domain.ErrForbidden)
+		return
+	}
+	var body struct {
+		UploadConcurrency int `json:"upload_concurrency"`
+	}
+	if err := decode(w, r, &body); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if err := s.service.UpdateUploadConcurrency(r.Context(), current(r), body.UploadConcurrency); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	s.settings(w, r)
 }
 func (s *Server) unavailable(w http.ResponseWriter, r *http.Request) {
 	reply(w, 503, map[string]any{"error": map[string]string{"code": "feature_unavailable", "message": "This feature is unavailable in the current configuration or implementation phase"}})

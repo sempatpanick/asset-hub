@@ -4,7 +4,7 @@ Open **API Docs** from the workspace sidebar. It opens `/api-docs/` in a new tab
 the guide and reference are public, while API requests still enforce the caller’s
 authentication and permissions.
 
-The website documents all 36 HTTP operations: sessions, invitations, projects,
+The website documents all 37 HTTP operations: sessions, invitations, projects,
 memberships, API keys, files, resumable uploads, content, workspace settings,
 activity, dependency health, liveness and readiness. Each operation includes its
 access requirements, parameters, body fields, success examples and error examples.

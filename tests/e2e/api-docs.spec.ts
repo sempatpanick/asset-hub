@@ -38,9 +38,20 @@ async function operation(page: Page, id: string) {
   await expect(consolePanel(page)).toBeVisible();
 }
 async function send(page: Page, status: number) {
-  await consolePanel(page)
-    .getByRole("button", { name: "Send request", exact: true })
-    .click();
+  const [method, url] = (
+    await consolePanel(page).locator(".docs-url code").innerText()
+  ).split(" ");
+  // Uploads include durable writes. Wait for the request before asserting its UI.
+  const [response] = await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.url() === url && response.request().method() === method,
+    ),
+    consolePanel(page)
+      .getByRole("button", { name: "Send request", exact: true })
+      .click(),
+  ]);
+  expect(response.status()).toBe(status);
   await expect(
     consolePanel(page).getByRole("heading", {
       name: new RegExp(`Live response: HTTP ${status} `),

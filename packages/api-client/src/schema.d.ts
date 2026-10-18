@@ -625,7 +625,7 @@ export interface paths {
         };
         /**
          * Read effective settings
-         * @description Read-only, non-secret runtime settings. Check features.uploads, content and backups before using those capabilities. With backups disabled, backup_retention_days is 0 and restore is unavailable. API keys cannot call this endpoint.
+         * @description Non-secret runtime settings, including the saved upload_concurrency (1–20, default 20). Administrators can change upload concurrency with PATCH /settings; editable reports that permission. Check features.uploads, content and backups before using those capabilities. With backups disabled, backup_retention_days is 0 and restore is unavailable. API keys cannot call this endpoint.
          */
         get: operations["settings"];
         put?: never;
@@ -633,7 +633,11 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Update upload concurrency
+         * @description Administrator session only. Save upload_concurrency from 1 to 20 (default 20). The persisted limit applies to new multipart, part and completion requests on each API instance without a restart. Existing transfers finish when the limit is lowered. Cookie requests require X-CSRF-Token and the configured Origin. Other settings remain deployment-managed. Project API keys cannot change this setting.
+         */
+        patch: operations["updateSettings"];
         trace?: never;
     };
     "/healthz": {
@@ -885,6 +889,9 @@ export interface components {
             backup_retention_days: number;
             signed_url_seconds: number;
             encryption: string;
+            /** @description Maximum concurrent upload transfer requests per API instance; defaults to 20. */
+            upload_concurrency: number;
+            /** @description The current session is allowed to change upload_concurrency. */
             editable: boolean;
         };
     };
@@ -6869,10 +6876,163 @@ export interface operations {
                      *       "backup_retention_days": 30,
                      *       "signed_url_seconds": 900,
                      *       "encryption": "AES-256-GCM",
+                     *       "upload_concurrency": 20,
                      *       "editable": false
                      *     }
                      */
                     "application/json": components["schemas"]["Settings"];
+                };
+            };
+            /** @description Invalid credentials or expired session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "unauthorized",
+                     *         "message": "Invalid credentials or expired session",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description This action is not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "forbidden",
+                     *         "message": "This action is not permitted",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Request failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "Request failed",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
+                };
+            };
+        };
+    };
+    updateSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "upload_concurrency": 20
+                 *     }
+                 */
+                "application/json": {
+                    /** @description Maximum simultaneous upload transfer requests per API instance. */
+                    upload_concurrency: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Saved upload limit and effective settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "name": "AssetHub",
+                     *       "version": "0.3.0",
+                     *       "phase": "content",
+                     *       "features": {
+                     *         "uploads": true,
+                     *         "content": true,
+                     *         "projects": true,
+                     *         "api_keys": true,
+                     *         "invitations": true,
+                     *         "backups": true
+                     *       },
+                     *       "storage_provider": "telegram",
+                     *       "asset_limit_bytes": 536870912,
+                     *       "upload_part_bytes": 8388608,
+                     *       "storage_chunk_bytes": 16777216,
+                     *       "backup_retention_days": 30,
+                     *       "signed_url_seconds": 900,
+                     *       "encryption": "AES-256-GCM",
+                     *       "editable": true,
+                     *       "upload_concurrency": 20
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Settings"];
+                };
+            };
+            /** @description Check the supplied fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "invalid_input",
+                     *         "message": "Check the supplied fields",
+                     *         "request_id": "example-request-id"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        error: {
+                            code: string;
+                            message: string;
+                            request_id?: string;
+                        };
+                    };
                 };
             };
             /** @description Invalid credentials or expired session */

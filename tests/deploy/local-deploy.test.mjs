@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   mkdirSync,
   mkdtempSync,
@@ -12,7 +13,11 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import {
   deployImages,
+  archiveParts,
+  readServerRelease,
   sourceArchiveArguments,
+  sshArguments,
+  transferVerifiedBundle,
   validateConfig,
   verifySource,
 } from "../../scripts/local-deploy.mjs";
@@ -51,9 +56,14 @@ function fixture(t, overrides = {}) {
     if (
       overrides.failVerify &&
       command === "docker" &&
-      args.includes("--exit-code-from")
+      args.includes("run") &&
+      args.at(-1) === "verify"
     )
       throw new Error("Verification failed");
+    if (overrides.failInfrastructure && args.includes("up"))
+      throw new Error("Test services failed to become healthy");
+    if (overrides.failCleanup && args.includes("down"))
+      throw new Error("Verification cleanup failed");
     return "";
   };
   return { root, source: root, sha, config, evidence, run, calls };
@@ -64,6 +74,248 @@ test("unchanged server releases perform no build, verification or transfer", (t)
   assert.equal(deployImages(f).status, "unchanged");
   assert.equal(f.calls.length, 1);
   assert.equal(f.calls[0].command, "ssh");
+});
+
+function sshFailure(stderr, status = 255) {
+  return Object.assign(new Error("SSH command failed"), { status, stderr });
+}
+
+test("Cloudflare handshakes have a longer bounded timeout with strict authentication", () => {
+  const args = sshArguments(config);
+  assert.ok(args.includes("ConnectTimeout=60"));
+  assert.ok(args.includes("StrictHostKeyChecking=yes"));
+  assert.ok(args.includes("BatchMode=yes"));
+  assert.ok(args.includes("IdentitiesOnly=yes"));
+  assert.ok(
+    sshArguments({ ...config, cloudflare: false }).includes(
+      "ConnectTimeout=30",
+    ),
+  );
+});
+
+test("read-only preflight recovers from banner timeouts with bounded backoff", () => {
+  const calls = [];
+  const pauses = [];
+  const notices = [];
+  const result = readServerRelease({
+    root,
+    config,
+    run(command, args, options) {
+      calls.push({ command, args, options });
+      if (calls.length < 3)
+        throw sshFailure("Connection timed out during banner exchange");
+      return sha;
+    },
+    pause: (milliseconds) => pauses.push(milliseconds),
+    onRetry: (message) => notices.push(message),
+  });
+  assert.equal(result, sha);
+  assert.equal(calls.length, 3);
+  assert.deepEqual(pauses, [2000, 4000]);
+  assert.equal(notices.length, 2);
+  for (const call of calls) {
+    assert.equal(call.command, "ssh");
+    assert.equal(call.options.timeout, 75_000);
+    assert.match(call.args.at(-1), /cat deploy\/current-release/);
+    assert.doesNotMatch(
+      call.args.at(-1),
+      /mkdir|docker image load|deploy-release\.sh/,
+    );
+  }
+});
+
+test("three preflight timeouts stop before verification, builds or transfer", (t) => {
+  const f = fixture(t);
+  const calls = [];
+  f.run = (command, args) => {
+    calls.push({ command, args });
+    throw sshFailure("Connection to UNKNOWN port 65535 timed out");
+  };
+  f.pause = () => {};
+  f.onRetry = () => {};
+  assert.throws(() => deployImages(f), /SSH command failed/);
+  assert.equal(calls.length, 3);
+  assert.ok(calls.every((call) => call.command === "ssh"));
+});
+
+test("authentication, host-key and remote preflight failures are never retried", () => {
+  for (const failure of [
+    sshFailure("Permission denied (publickey,password)."),
+    sshFailure("Host key verification failed."),
+    sshFailure(
+      "Connection to UNKNOWN port 65535 timed out\nPermission denied (publickey).",
+    ),
+    sshFailure(
+      "Connection timed out during banner exchange\nREMOTE HOST IDENTIFICATION HAS CHANGED!",
+    ),
+    sshFailure("Remote Docker preflight failed", 1),
+  ]) {
+    let calls = 0;
+    assert.throws(
+      () =>
+        readServerRelease({
+          root,
+          config,
+          run() {
+            calls++;
+            throw failure;
+          },
+          pause: () => assert.fail("Permanent failures must not wait"),
+        }),
+      (error) => error === failure,
+    );
+    assert.equal(calls, 1);
+  }
+});
+
+test("a timed-out rollout command is never replayed", (t) => {
+  const f = fixture(t);
+  const run = f.run;
+  let rollouts = 0;
+  f.run = (command, args, options) => {
+    if (command === "ssh" && args.at(-1).includes("docker image load")) {
+      rollouts++;
+      throw sshFailure("Connection to UNKNOWN port 65535 timed out");
+    }
+    return run(command, args, options);
+  };
+  assert.throws(() => deployImages(f), /SSH command failed/);
+  assert.equal(rollouts, 1);
+  assert.equal(f.calls.filter((call) => call.command === "scp").length, 1);
+});
+
+test("connection resets in the read-only preflight recover without remote writes", () => {
+  let calls = 0;
+  const pauses = [];
+  assert.equal(
+    readServerRelease({
+      root,
+      config,
+      run() {
+        if (++calls === 1)
+          throw sshFailure(
+            "An existing connection was forcibly closed by the remote host.\nConnection closed by UNKNOWN port 65535",
+          );
+        return sha;
+      },
+      pause: (delay) => pauses.push(delay),
+      onRetry: () => {},
+    }),
+    sha,
+  );
+  assert.equal(calls, 2);
+  assert.deepEqual(pauses, [2000]);
+});
+
+test("image parts preserve exact bytes and have independent verified hashes", (t) => {
+  const f = fixture(t);
+  const bundle = join(f.evidence, "parts");
+  mkdirSync(bundle);
+  const bytes = Buffer.alloc(4 * 1024 * 1024 + 73, 29);
+  writeFileSync(join(bundle, "images.tar"), bytes);
+  const parts = archiveParts(bundle);
+  assert.equal(parts.length, 2);
+  const rebuilt = parts.map((part) => {
+    const content = readFileSync(join(bundle, part.name));
+    assert.equal(createHash("sha256").update(content).digest("hex"), part.hash);
+    assert.ok(content.length <= 4 * 1024 * 1024);
+    return content;
+  });
+  assert.deepEqual(Buffer.concat(rebuilt), bytes);
+});
+
+test("verified remote image parts are reused and assembly precedes complete checksum validation", (t) => {
+  const f = fixture(t);
+  const run = f.run;
+  f.run = (command, args, options) => {
+    const result = run(command, args, options);
+    if (command === "docker" && args[0] === "image" && args[1] === "save")
+      writeFileSync(args[3], Buffer.alloc(4 * 1024 * 1024 + 73, 29));
+    if (command === "ssh" && args.at(-1).includes("sha256sum --check --status"))
+      return args.at(-1).includes("000000.part") ? "verified" : "";
+    return result;
+  };
+  assert.equal(deployImages(f).status, "deployed");
+  const copies = f.calls.filter((call) => call.command === "scp");
+  assert.equal(copies.length, 2);
+  assert.equal(
+    copies[0].args.some((arg) => arg.endsWith("/images.tar")),
+    false,
+  );
+  assert.ok(copies[1].args.some((arg) => arg.endsWith("000001.part")));
+  const command = f.calls.at(-1).args.at(-1);
+  assert.ok(
+    command.indexOf("cat '.image-parts/000000.part'") <
+      command.indexOf("sha256sum --check SHA256SUMS"),
+  );
+  assert.ok(
+    command.indexOf("sha256sum --check SHA256SUMS") <
+      command.indexOf("docker image load"),
+  );
+});
+
+test("interrupted transfers overwrite only the checked candidate and precede one rollout", (t) => {
+  const f = fixture(t);
+  const run = f.run;
+  const pauses = [];
+  let transfers = 0;
+  f.run = (command, args, options) => {
+    const result = run(command, args, options);
+    if (command === "scp" && ++transfers < 3)
+      throw sshFailure(
+        "Connection to UNKNOWN port 65535 timed out\nscp: Connection closed",
+      );
+    return result;
+  };
+  f.pause = (delay) => pauses.push(delay);
+  f.onRetry = () => {};
+  assert.equal(deployImages(f).status, "deployed");
+  assert.equal(transfers, 3);
+  assert.deepEqual(pauses, [2000, 4000]);
+  const copies = f.calls.filter((call) => call.command === "scp");
+  assert.deepEqual(copies[0].args, copies[2].args);
+  assert.ok(copies.every((call) => call.options.capture));
+  assert.equal(
+    f.calls.filter(
+      (call) =>
+        call.command === "ssh" &&
+        call.args.at(-1).includes("docker image load"),
+    ).length,
+    1,
+  );
+});
+
+test("tampered checked bundles stop before any server connection", (t) => {
+  const f = fixture(t);
+  deployImages(f);
+  f.calls.length = 0;
+  writeFileSync(join(f.evidence, "bundle/images.tar"), "changed archive");
+  assert.throws(
+    () => transferVerifiedBundle({ ...f, current: "b".repeat(40) }),
+    /checksum mismatch/,
+  );
+  assert.equal(f.calls.length, 0);
+});
+
+test("an active release changed during builds prevents candidate staging and transfer", (t) => {
+  const f = fixture(t);
+  const run = f.run;
+  let probes = 0;
+  f.run = (command, args, options) => {
+    const result = run(command, args, options);
+    if (command === "ssh" && args.at(-1).includes("uname -m") && ++probes === 2)
+      return "c".repeat(40);
+    return result;
+  };
+  assert.throws(() => deployImages(f), /active release changed/);
+  assert.equal(
+    f.calls.some(
+      (call) =>
+        call.command === "scp" ||
+        (call.command === "ssh" && call.args.at(-1).includes("mkdir")),
+    ),
+    false,
+  );
 });
 
 test("failed real-service verification cleans only the disposable project and prevents rollout", (t) => {
@@ -87,12 +339,24 @@ test("failed real-service verification cleans only the disposable project and pr
 test("successful checks precede ARM64 builds and a checksummed SSH rollout", (t) => {
   const f = fixture(t);
   assert.equal(deployImages(f).status, "deployed");
-  const verification = f.calls.findIndex((call) =>
-    call.args.includes("--exit-code-from"),
-  );
+  const verification = f.calls.findIndex((call) => call.args.includes("run"));
+  const startup = f.calls.findIndex((call) => call.args.includes("up"));
+  const cleanup = f.calls.findIndex((call) => call.args.includes("down"));
   const build = f.calls.findIndex((call) => call.args.includes("buildx"));
   const transfer = f.calls.findIndex((call) => call.command === "scp");
-  assert.ok(verification < build && build < transfer);
+  assert.ok(
+    startup < verification && verification < cleanup && cleanup < build,
+  );
+  assert.ok(build < transfer);
+  assert.ok(f.calls[startup].args.includes("--wait"));
+  assert.ok(f.calls[verification].args.includes("--rm"));
+  assert.ok(f.calls[verification].args.includes("--no-deps"));
+  assert.ok(f.calls[verification].args.includes("--interactive=false"));
+  assert.equal(
+    f.calls.some((call) => call.args.includes("--abort-on-container-exit")),
+    false,
+  );
+  assert.equal(f.calls[cleanup].options.timeout, 120_000);
   assert.ok(f.calls[build].args.includes("linux/arm64"));
   const command = f.calls.at(-1).args.at(-1);
   assert.ok(
@@ -159,6 +423,27 @@ test("a failing verifier always removes its isolated services", (t) => {
   const f = fixture(t, { failVerify: true });
   assert.throws(() => verifySource(f), /Verification failed/);
   assert.ok(f.calls.at(-1).args.includes("--volumes"));
+});
+
+test("unhealthy verification services prevent the verifier and rollout but still clean up", (t) => {
+  const f = fixture(t, { failInfrastructure: true });
+  assert.throws(() => deployImages(f), /failed to become healthy/);
+  assert.ok(f.calls.at(-1).args.includes("down"));
+  assert.equal(
+    f.calls.some((call) => call.args.includes("run") || call.command === "scp"),
+    false,
+  );
+});
+
+test("failed verification cleanup prevents application builds and transfer", (t) => {
+  const f = fixture(t, { failCleanup: true });
+  assert.throws(() => deployImages(f), /Verification cleanup failed/);
+  assert.equal(
+    f.calls.some(
+      (call) => call.args.includes("buildx") || call.command === "scp",
+    ),
+    false,
+  );
 });
 
 test("generated API freshness accepts CRLF/LF differences but rejects changed content", (t) => {

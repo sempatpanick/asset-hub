@@ -34,7 +34,7 @@ POST /v1/uploads declares project_id, name and size (up to 512 MiB); returns upl
 
 ## Dashboard
 
-GET /v1/overview supplies authorized total files/logical bytes/projects, daily upload activity and recent assets. GET /v1/activity supplies audit events. GET /v1/uploads supplies upload/job progress. Project membership endpoints expose explicit roles. Settings expose effective non-secret configuration and feature availability. Configuration changes are environment-based; this endpoint is read-only.
+GET /v1/overview supplies authorized total files/logical bytes/projects, daily upload activity and recent assets. GET /v1/activity supplies audit events. GET /v1/uploads supplies upload/job progress. Project membership endpoints expose explicit roles. GET /v1/settings exposes effective non-secret configuration, feature availability and upload_concurrency. An administrator session can PATCH /v1/settings with {"upload_concurrency":20} to persist a limit from 1 to 20 (default 20); session CSRF and Origin checks apply. The limit applies to concurrent multipart, raw-part and completion requests on each API process, including project-key uploads. Changes apply without restart; lowering the limit lets existing transfers finish. Excess requests return 429 busy with Retry-After: 2. Other deployment settings remain environment-based. The browser uploads files in parallel up to the saved limit.
 
 ## HTTP content semantics
 
