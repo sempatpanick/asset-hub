@@ -10,6 +10,8 @@ The production dependency audit blocks releases. The full development-tool audit
 
 `.github/workflows/deploy.yml` runs on main pushes and manual dispatch on main. It waits for all CI jobs, then publishes backend and web images on `ubuntu-24.04-arm`. GitHub supports this standard runner in private repositories. The workflow does not use QEMU. Actions are pinned to verified commit SHAs; cloudflared is pinned to 2026.10.0 with its release checksum.
 
+The frontend builds once in CI. After browser tests and the production dependency audit pass, CI uploads its static export as a commit-specific tar artifact. The web publish job downloads that artifact from the same workflow run and selects the Dockerfile's `release` target, which packages the tested files into ARM64 Nginx without installing pnpm dependencies or running another Next.js build. An existing source-hashed web image skips both the artifact download and image build. Ordinary source Docker/Compose builds keep the default `source` target. Docker's [named build contexts](https://docs.docker.com/build/concepts/context/#named-contexts) carry the export separately from the source checkout.
+
 Backend/api/worker/migrator share `ghcr.io/sempatpanick/asset-hub/backend`; the frontend uses `ghcr.io/sempatpanick/asset-hub/web`. Source hashes cover committed Docker build inputs, so unchanged images are reused. Deployment uses the registry's immutable image digests, recorded in release artifacts. No production secrets enter image builds or release artifacts.
 
 ## GitHub configuration

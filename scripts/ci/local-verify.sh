@@ -40,4 +40,6 @@ pnpm run build
 bash scripts/ci/browser-test.sh --grep-invert 'backups disabled'
 BACKUP_ENABLED=false bash scripts/ci/browser-test.sh --grep 'backups disabled'
 pnpm audit --prod --audit-level=high
+test -s apps/web/out/index.html
+cp -a apps/web/out/. /web-export/
 printf 'All local release checks passed.\n'

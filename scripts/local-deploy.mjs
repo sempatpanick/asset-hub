@@ -5,6 +5,7 @@ import {
   copyFileSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
   openSync,
   readFileSync,
   readSync,
@@ -186,6 +187,8 @@ function fileHash(path) {
 export function verifySource({ root, source, sha, evidence, run = execute }) {
   if (!shaPattern.test(sha)) throw new Error("Invalid release commit.");
   mkdirSync(evidence, { recursive: true });
+  // A fresh directory prevents a previous verification's export from being reused.
+  const webExport = mkdtempSync(join(evidence, "web-export-"));
   const image = `assethub-local/verify:${sha}`;
   run(
     "docker",
@@ -213,6 +216,7 @@ export function verifySource({ root, source, sha, evidence, run = execute }) {
     env: {
       LOCAL_VERIFY_IMAGE: image,
       LOCAL_EVIDENCE_DIRECTORY: evidence,
+      LOCAL_WEB_EXPORT_DIRECTORY: webExport,
       LOCAL_TEST_POSTGRES_PASSWORD: randomBytes(32).toString("hex"),
       COMPOSE_ANSI: "never",
       COMPOSE_PROGRESS: "plain",
@@ -256,6 +260,7 @@ export function verifySource({ root, source, sha, evidence, run = execute }) {
       timeout: 120_000,
     });
   }
+  return webExport;
 }
 
 export function deployImages({
@@ -280,11 +285,17 @@ export function deployImages({
   const toolingHash = () =>
     plumbing.map((path) => fileHash(join(root, path))).join(":");
   const verifiedTooling = toolingHash();
-  verify({ root, source, sha, evidence, run });
+  const webExport = verify({ root, source, sha, evidence, run });
   if (toolingHash() !== verifiedTooling)
     throw new Error(
       "Deployment helpers changed during verification. Run again.",
     );
+  if (
+    !webExport ||
+    !existsSync(join(webExport, "index.html")) ||
+    statSync(join(webExport, "index.html")).size === 0
+  )
+    throw new Error("Verification did not produce a tested static web export.");
   const bundle = join(evidence, "bundle");
   mkdirSync(bundle, { recursive: true });
   const images = {};
@@ -301,6 +312,14 @@ export function deployImages({
         "--load",
         "--tag",
         image,
+        ...(service === "web"
+          ? [
+              "--target",
+              "release",
+              "--build-context",
+              `web-export=${webExport}`,
+            ]
+          : []),
         "--file",
         join(root, `deploy/${service}.Dockerfile`),
         source,

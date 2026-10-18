@@ -36,3 +36,4 @@ services:
     tmpfs: ["/browser-fixtures:rw,nosuid,nodev,noexec,size=512m,mode=0700"]
     volumes:
       - ${LOCAL_EVIDENCE_DIRECTORY:?Set the local evidence directory}:/evidence
+      - ${LOCAL_WEB_EXPORT_DIRECTORY:?Set the tested static export directory}:/web-export

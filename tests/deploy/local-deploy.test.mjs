@@ -60,6 +60,16 @@ function fixture(t, overrides = {}) {
       args.at(-1) === "verify"
     )
       throw new Error("Verification failed");
+    if (
+      !overrides.missingWebExport &&
+      command === "docker" &&
+      args.includes("run") &&
+      args.at(-1) === "verify"
+    )
+      writeFileSync(
+        join(options.env.LOCAL_WEB_EXPORT_DIRECTORY, "index.html"),
+        "<html>tested static export</html>",
+      );
     if (overrides.failInfrastructure && args.includes("up"))
       throw new Error("Test services failed to become healthy");
     if (overrides.failCleanup && args.includes("down"))
@@ -401,6 +411,70 @@ test("wrong-platform images prevent transfer even after checks pass", (t) => {
   assert.throws(() => deployImages(f), /ARM64/);
   assert.equal(
     f.calls.some((call) => call.command === "scp"),
+    false,
+  );
+});
+
+test("web releases package the fresh verified export without selecting a source build", (t) => {
+  const f = fixture(t);
+  deployImages(f);
+  const verification = f.calls.find((call) => call.args.at(-1) === "verify");
+  const builds = f.calls.filter((call) => call.args.includes("buildx"));
+  const webBuild = builds.find((call) =>
+    call.args.includes(`assethub-local/web:${sha}`),
+  );
+  const exportDirectory = verification.options.env.LOCAL_WEB_EXPORT_DIRECTORY;
+  assert.equal(dirname(exportDirectory), f.evidence);
+  assert.match(exportDirectory, /web-export-/);
+  assert.ok(webBuild.args.includes(`web-export=${exportDirectory}`));
+  assert.equal(webBuild.args[webBuild.args.indexOf("--target") + 1], "release");
+  assert.match(
+    readFileSync(join(exportDirectory, "index.html"), "utf8"),
+    /tested static export/,
+  );
+  assert.equal(builds[0].args.includes("--target"), false);
+});
+
+test("a missing fresh export rejects stale output and prevents builds or transfer", (t) => {
+  const f = fixture(t, { missingWebExport: true });
+  mkdirSync(join(f.evidence, "web-export-stale"));
+  writeFileSync(
+    join(f.evidence, "web-export-stale/index.html"),
+    "previous unchecked export",
+  );
+  assert.throws(
+    () => deployImages(f),
+    /did not produce a tested static web export/,
+  );
+  assert.ok(f.calls.at(-1).args.includes("down"));
+  assert.equal(
+    f.calls.some(
+      (call) => call.args.includes("buildx") || call.command === "scp",
+    ),
+    false,
+  );
+});
+
+test("an empty export prevents builds and transfer after verification", (t) => {
+  const f = fixture(t);
+  const run = f.run;
+  f.run = (command, args, options) => {
+    const result = run(command, args, options);
+    if (args.at(-1) === "verify")
+      writeFileSync(
+        join(options.env.LOCAL_WEB_EXPORT_DIRECTORY, "index.html"),
+        "",
+      );
+    return result;
+  };
+  assert.throws(
+    () => deployImages(f),
+    /did not produce a tested static web export/,
+  );
+  assert.equal(
+    f.calls.some(
+      (call) => call.args.includes("buildx") || call.command === "scp",
+    ),
     false,
   );
 });

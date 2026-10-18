@@ -144,6 +144,20 @@ jobs:
       - name: Report full tooling audit (unpatched braces advisory)
         continue-on-error: true
         run: pnpm audit --audit-level=high
+      - name: Package tested static export
+        if: github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+          test -s apps/web/out/index.html
+          tar -C apps/web/out -cf .local/web-static.tar .
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: github.ref == 'refs/heads/main'
+        with:
+          name: web-static-${{ github.sha }}
+          path: .local/web-static.tar
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 7
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
