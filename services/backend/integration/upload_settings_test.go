@@ -16,6 +16,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -90,11 +91,22 @@ func TestUploadSettingsAndConcurrentRequests(t *testing.T) {
 	var view struct {
 		Limit    int  `json:"upload_concurrency"`
 		Editable bool `json:"editable"`
+		Request  int  `json:"upload_request_timeout_seconds"`
+		Response int  `json:"upload_response_timeout_seconds"`
+		Lifetime int  `json:"upload_session_lifetime_hours"`
 	}
-	if err = json.Unmarshal(settings.Body.Bytes(), &view); err != nil || view.Limit != 20 || !view.Editable {
+	if err = json.Unmarshal(settings.Body.Bytes(), &view); err != nil || view.Limit != 20 || !view.Editable || view.Request != 120 || view.Response != 150 || view.Lifetime != 24 {
 		t.Fatal("incorrect defaults", view, err)
 	}
 	for _, body := range []string{`{}`, `{"upload_concurrency":0}`, `{"upload_concurrency":21}`, `{"upload_concurrency":-1}`, `{"upload_concurrency":1.5}`, `{"upload_concurrency":null}`, `{"upload_concurrency":"20"}`, `{"upload_concurrency":20,"unknown":true}`} {
+		check(call("PATCH", body, token, csrf, "http://localhost:8080", ""), 400)
+	}
+	for _, body := range []string{
+		`{"upload_request_timeout_seconds":29}`, `{"upload_request_timeout_seconds":1801}`, `{"upload_request_timeout_seconds":null}`,
+		`{"upload_response_timeout_seconds":59}`, `{"upload_response_timeout_seconds":1831}`, `{"upload_response_timeout_seconds":149}`,
+		`{"upload_session_lifetime_hours":0}`, `{"upload_session_lifetime_hours":169}`, `{"upload_session_lifetime_hours":1.5}`, `{"upload_session_lifetime_hours":null}`,
+		`{"upload_request_timeout_seconds":300,"upload_response_timeout_seconds":320}`, `{"upload_response_timeout_seconds":true}`,
+	} {
 		check(call("PATCH", body, token, csrf, "http://localhost:8080", ""), 400)
 	}
 	check(call("PATCH", `{"upload_concurrency":1}`, "", "", "", ""), 401)
@@ -130,13 +142,57 @@ func TestUploadSettingsAndConcurrentRequests(t *testing.T) {
 	}
 	defer reopened.Pool.Close()
 	restarted := usecases.New(reopened, security.Security{}, security.Clock{}, healthy{})
-	if limit, e := restarted.UploadConcurrency(ctx); e != nil || limit != 2 {
-		t.Fatal("setting lost after restart", limit, e)
+	if saved, e := restarted.UploadSettings(ctx); e != nil || saved.Concurrency != 2 {
+		t.Fatal("setting lost after restart", saved, e)
 	}
 	var auditCount int
 	if err = reopened.Pool.QueryRow(ctx, "SELECT count(*) FROM audit_events WHERE action='settings.updated'").Scan(&auditCount); err != nil || auditCount != 1 {
 		t.Fatal("missing or unauthorized setting audit", auditCount, err)
 	}
+	patch := func(body string) {
+		t.Helper()
+		check(call("PATCH", body, token, csrf, "http://localhost:8080", ""), 200)
+	}
+	oldSession, err := ingest.Create(ctx, p, project.ID, "original-lifetime.txt", 1, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Compare persisted timestamps to persisted timestamps: PostgreSQL stores
+	// microseconds and supplies created_at when it inserts the reservation.
+	oldSession, err = ingest.Get(ctx, p, oldSession.ID, "read")
+	if err != nil {
+		t.Fatal(err)
+	}
+	patch(`{"upload_request_timeout_seconds":300,"upload_response_timeout_seconds":360,"upload_session_lifetime_hours":48}`)
+	if saved, e := restarted.UploadSettings(ctx); e != nil || saved.Concurrency != 2 || saved.RequestTimeoutSeconds != 300 || saved.ResponseTimeoutSeconds != 360 || saved.SessionLifetimeHours != 48 {
+		t.Fatal("timeout persistence or partial patch", saved, e)
+	}
+	newSession, err := ingest.Create(ctx, p, project.ID, "extended-lifetime.txt", 1, "")
+	if err != nil || newSession.ExpiresAt.Sub(newSession.CreatedAt).Round(time.Second) != 48*time.Hour {
+		t.Fatal("session lifetime not applied", newSession, err)
+	}
+	unchanged, err := ingest.Get(ctx, p, oldSession.ID, "read")
+	if err != nil || !unchanged.ExpiresAt.Equal(oldSession.ExpiresAt) {
+		t.Fatal("existing expiry changed", err)
+	}
+	patch(`{"upload_request_timeout_seconds":30,"upload_response_timeout_seconds":60,"upload_session_lifetime_hours":1}`)
+	patch(`{"upload_request_timeout_seconds":1800,"upload_response_timeout_seconds":1830,"upload_session_lifetime_hours":168}`)
+	// Concurrent partial patches serialize against the current row instead of
+	// overwriting another administrator's unrelated fields.
+	var updates sync.WaitGroup
+	for _, values := range []domain.UploadSettingsPatch{{Concurrency: new(3)}, {SessionLifetimeHours: new(24)}} {
+		updates.Go(func() {
+			if err := app.UpdateUploadSettings(ctx, p, values); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	updates.Wait()
+	if saved, e := restarted.UploadSettings(ctx); e != nil || saved.Concurrency != 3 || saved.SessionLifetimeHours != 24 {
+		t.Fatal("concurrent partial settings lost", saved, e)
+	}
+	setLimit(2)
+	patch(`{"upload_request_timeout_seconds":300,"upload_response_timeout_seconds":360}`)
 	uploads := make([]domain.Upload, 21)
 	for index := range uploads {
 		uploads[index], err = ingest.Create(ctx, p, project.ID, fmt.Sprintf("image-%d.txt", index), 1, "")
@@ -182,6 +238,11 @@ func TestUploadSettingsAndConcurrentRequests(t *testing.T) {
 	}
 	begin(0)
 	begin(1)
+	var originalDeadline time.Time
+	if err = repo.Pool.QueryRow(ctx, "SELECT transfer_until FROM uploads WHERE id=$1", uploads[0].ID).Scan(&originalDeadline); err != nil || time.Until(originalDeadline) < 375*time.Second {
+		t.Fatal("configured deadline not recorded", originalDeadline, err)
+	}
+	patch(`{"upload_request_timeout_seconds":30,"upload_response_timeout_seconds":60}`)
 	busy()
 	// Increase while transfers are held open: all twenty must overlap.
 	setLimit(20)
@@ -210,4 +271,38 @@ func TestUploadSettingsAndConcurrentRequests(t *testing.T) {
 		t.Fatal("last upload did not finish")
 	}
 	check(put(20, strings.NewReader("x")), 200)
+	if err = ingest.Cancel(ctx, p, uploads[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = os.Stat(filepath.Join(stage.Root, uploads[0].ID)); err != nil {
+		t.Fatal("cancellation removed staging before its guarded deadline", err)
+	}
+	if _, err = repo.Pool.Exec(ctx, "UPDATE uploads SET ended_at=now()-interval '4 minutes' WHERE id=$1", uploads[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	cleanable, err := repo.CleanupUploads(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range cleanable {
+		if id == uploads[0].ID {
+			t.Fatal("cleanup ignored the older transfer deadline after lowering timeouts")
+		}
+	}
+	if _, err = repo.Pool.Exec(ctx, "UPDATE uploads SET transfer_until=now()-interval '1 second' WHERE id=$1", uploads[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	cleanable, err = repo.CleanupUploads(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, id := range cleanable {
+		if id == uploads[0].ID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("staging never becomes eligible after transfer deadline")
+	}
 }

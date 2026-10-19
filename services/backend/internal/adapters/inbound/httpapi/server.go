@@ -85,7 +85,7 @@ func New(service *usecases.Service, origin string, secure bool, log *slog.Logger
 			r.Get("/uploads", s.uploads)
 			r.Get("/uploads/{id}", s.upload)
 			r.Get("/assets/{id}", s.asset)
-			r.With(s.mutation).Post("/uploads", s.createUpload)
+			r.With(s.mutation, s.uploadTimeout).Post("/uploads", s.createUpload)
 			r.With(s.mutation, s.transferLimit).Put("/uploads/{id}/parts/{index}", s.putPart)
 			r.With(s.mutation, s.transferLimit).Post("/uploads/{id}/complete", s.completeUpload)
 			r.With(s.mutation).Delete("/uploads/{id}", s.cancelUpload)
@@ -530,12 +530,12 @@ func (s *Server) settings(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, domain.ErrForbidden)
 		return
 	}
-	limit, err := s.service.UploadConcurrency(r.Context())
+	upload, err := s.service.UploadSettings(r.Context())
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	reply(w, 200, map[string]any{"name": "AssetHub", "version": "0.3.0", "phase": "content", "features": map[string]bool{"uploads": s.service.Ingestion().Enabled(), "content": s.service.Ingestion().ContentEnabled(), "projects": true, "api_keys": true, "invitations": current(r).IsAdmin(), "backups": s.service.Ingestion().BackupEnabled()}, "storage_provider": s.service.Ingestion().ProviderName(), "asset_limit_bytes": 512 << 20, "upload_part_bytes": 8 << 20, "storage_chunk_bytes": 16 << 20, "backup_retention_days": s.service.Ingestion().BackupRetentionDays(), "signed_url_seconds": 900, "encryption": "AES-256-GCM", "upload_concurrency": limit, "editable": current(r).IsAdmin()})
+	reply(w, 200, map[string]any{"name": "AssetHub", "version": "0.3.0", "phase": "content", "features": map[string]bool{"uploads": s.service.Ingestion().Enabled(), "content": s.service.Ingestion().ContentEnabled(), "projects": true, "api_keys": true, "invitations": current(r).IsAdmin(), "backups": s.service.Ingestion().BackupEnabled()}, "storage_provider": s.service.Ingestion().ProviderName(), "asset_limit_bytes": 512 << 20, "upload_part_bytes": 8 << 20, "storage_chunk_bytes": 16 << 20, "backup_retention_days": s.service.Ingestion().BackupRetentionDays(), "signed_url_seconds": 900, "encryption": "AES-256-GCM", "upload_concurrency": upload.Concurrency, "upload_request_timeout_seconds": upload.RequestTimeoutSeconds, "upload_response_timeout_seconds": upload.ResponseTimeoutSeconds, "upload_session_lifetime_hours": upload.SessionLifetimeHours, "editable": current(r).IsAdmin()})
 }
 
 func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
@@ -544,13 +544,35 @@ func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		UploadConcurrency int `json:"upload_concurrency"`
+		Concurrency     json.RawMessage `json:"upload_concurrency"`
+		RequestTimeout  json.RawMessage `json:"upload_request_timeout_seconds"`
+		ResponseTimeout json.RawMessage `json:"upload_response_timeout_seconds"`
+		SessionLifetime json.RawMessage `json:"upload_session_lifetime_hours"`
 	}
 	if err := decode(w, r, &body); err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	if err := s.service.UpdateUploadConcurrency(r.Context(), current(r), body.UploadConcurrency); err != nil {
+	var patch domain.UploadSettingsPatch
+	for _, field := range []struct {
+		raw    json.RawMessage
+		target **int
+	}{
+		{body.Concurrency, &patch.Concurrency}, {body.RequestTimeout, &patch.RequestTimeoutSeconds},
+		{body.ResponseTimeout, &patch.ResponseTimeoutSeconds}, {body.SessionLifetime, &patch.SessionLifetimeHours},
+	} {
+		if len(field.raw) == 0 {
+			continue
+		}
+		var value int
+		if err := json.Unmarshal(field.raw, &value); err != nil {
+			s.fail(w, r, domain.ErrInvalid)
+			return
+		}
+		// JSON null decodes to zero, which the domain rejects for every setting.
+		*field.target = &value
+	}
+	if err := s.service.UpdateUploadSettings(r.Context(), current(r), patch); err != nil {
 		s.fail(w, r, err)
 		return
 	}

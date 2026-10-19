@@ -100,9 +100,14 @@ func (r *Repository) RecordPart(ctx context.Context, id string, p domain.UploadP
 		return nil
 	})
 }
-func (r *Repository) BeginCompletion(ctx context.Context, id string) (domain.Upload, error) {
+func (r *Repository) ExtendUploadTransfer(ctx context.Context, id string, until time.Time) error {
+	_, err := r.Pool.Exec(ctx, "UPDATE uploads SET transfer_until=GREATEST(transfer_until,$2) WHERE id=$1", id, until)
+	return err
+}
+
+func (r *Repository) BeginCompletion(ctx context.Context, id string, until time.Time) (domain.Upload, error) {
 	err := r.transaction(ctx, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx, `UPDATE uploads SET status='completing',completion_until=now()+interval '15 minutes' WHERE id=$1 AND expires_at>now() AND (status='receiving' OR (status='completing' AND completion_until<now()))`, id)
+		tag, err := tx.Exec(ctx, `UPDATE uploads SET status='completing',completion_until=GREATEST(now()+interval '15 minutes',$2),transfer_until=GREATEST(transfer_until,$2) WHERE id=$1 AND expires_at>now() AND (status='receiving' OR (status='completing' AND completion_until<now()))`, id, until)
 		if err != nil {
 			return err
 		}
@@ -314,7 +319,7 @@ func (r *Repository) CleanupUploads(ctx context.Context) ([]string, error) {
 	if _, err := r.Pool.Exec(ctx, "UPDATE uploads SET status='expired',ended_at=now() WHERE status IN ('receiving','completing') AND expires_at<now() AND (completion_until IS NULL OR completion_until<now())"); err != nil {
 		return nil, err
 	}
-	rows, err := r.Pool.Query(ctx, "SELECT id::text FROM uploads WHERE status IN ('expired','cancelled','complete') AND cleaned_at IS NULL AND ended_at<now()-interval '3 minutes' LIMIT 200")
+	rows, err := r.Pool.Query(ctx, "SELECT id::text FROM uploads WHERE status IN ('expired','cancelled','complete') AND cleaned_at IS NULL AND ended_at<now()-interval '3 minutes' AND (transfer_until IS NULL OR transfer_until<now()) LIMIT 200")
 	if err != nil {
 		return nil, err
 	}

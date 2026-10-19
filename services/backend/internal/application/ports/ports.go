@@ -29,8 +29,8 @@ type Repository interface {
 	Overview(context.Context, domain.Principal) (domain.Overview, error)
 	Assets(context.Context, domain.Principal, string, string, string, string, int, int) ([]domain.Asset, error)
 	Activity(context.Context, domain.Principal, string, string, string, int, int) ([]domain.Activity, error)
-	UploadConcurrency(context.Context) (int, error)
-	UpdateUploadConcurrency(context.Context, domain.Principal, int) error
+	UploadSettings(context.Context) (domain.UploadSettings, error)
+	UpdateUploadSettings(context.Context, domain.Principal, domain.UploadSettingsPatch) error
 }
 type Security interface {
 	ID() string

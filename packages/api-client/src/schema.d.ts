@@ -500,7 +500,7 @@ export interface paths {
         put?: never;
         /**
          * Start a resumable upload
-         * @description Reserves capacity for a 1 byte–512 MiB file. Name is a safe filename, up to 180 characters. Optional sha256 is a lowercase 64-character full-file checksum. Session expires after 24 hours. Use the returned part_bytes to split the file; it is currently 8 MiB.
+         * @description Reserves capacity for a 1 byte–512 MiB file. Name is a safe filename, up to 180 characters. Optional sha256 is a lowercase 64-character full-file checksum. Session expiry uses upload_session_lifetime_hours (1–168 hours, default 24). Use the returned part_bytes to split the file; it is currently 8 MiB.
          */
         post: operations["createUpload"];
         delete?: never;
@@ -625,7 +625,7 @@ export interface paths {
         };
         /**
          * Read effective settings
-         * @description Non-secret runtime settings, including the saved upload_concurrency (1–20, default 20). Administrators can change upload concurrency with PATCH /settings; editable reports that permission. Check features.uploads, content and backups before using those capabilities. With backups disabled, backup_retention_days is 0 and restore is unavailable. API keys cannot call this endpoint.
+         * @description Read non-secret runtime settings and feature availability. Upload concurrency, request/response timeouts and resumable session lifetime are persisted and can be changed by administrators with PATCH /settings. editable reports that permission. With backups disabled, backup_retention_days is 0 and restore is unavailable. Project API keys cannot call this endpoint.
          */
         get: operations["settings"];
         put?: never;
@@ -634,8 +634,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Update upload concurrency
-         * @description Administrator session only. Save upload_concurrency from 1 to 20 (default 20). The persisted limit applies to new multipart, part and completion requests on each API instance without a restart. Existing transfers finish when the limit is lowered. Cookie requests require X-CSRF-Token and the configured Origin. Other settings remain deployment-managed. Project API keys cannot change this setting.
+         * Update upload settings
+         * @description Administrator session only. Send one or more supported fields; omitted fields retain their current values. Save concurrency (1–20), request timeout (30–1800 seconds), response timeout (60–1830 seconds, at least request timeout + 30), and session lifetime (1–168 hours). Defaults are 20, 120, 150 and 24 respectively. Changes persist across restarts. Timeouts apply to new upload requests; session lifetime sets expires_at when a new session is created. Existing transfers keep their original deadlines. Cookie writes require X-CSRF-Token and the configured Origin. Other settings remain deployment-managed. Project API keys cannot change these settings.
          */
         patch: operations["updateSettings"];
         trace?: never;
@@ -891,8 +891,14 @@ export interface components {
             encryption: string;
             /** @description Maximum concurrent upload transfer requests per API instance; defaults to 20. */
             upload_concurrency: number;
-            /** @description The current session is allowed to change upload_concurrency. */
+            /** @description The current session can change upload concurrency, request/response timeouts and session lifetime. */
             editable: boolean;
+            /** @description Seconds to receive one upload request body, measured after headers are accepted. Default 120. Applies to new upload requests. */
+            upload_request_timeout_seconds: number;
+            /** @description Total seconds for one upload request including validation. Must be at least 30 seconds longer than upload_request_timeout_seconds. Default 150. Applies to new upload requests. */
+            upload_response_timeout_seconds: number;
+            /** @description Hours allowed to complete a newly created resumable session. Default 24. Existing sessions retain their recorded expires_at. */
+            upload_session_lifetime_hours: number;
         };
     };
     responses: {
@@ -5696,7 +5702,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Capacity reserved; session expires after 24 hours */
+            /** @description Capacity reserved; expiry follows the saved session lifetime (default 24 hours) */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -6877,7 +6883,10 @@ export interface operations {
                      *       "signed_url_seconds": 900,
                      *       "encryption": "AES-256-GCM",
                      *       "upload_concurrency": 20,
-                     *       "editable": false
+                     *       "editable": false,
+                     *       "upload_request_timeout_seconds": 120,
+                     *       "upload_response_timeout_seconds": 150,
+                     *       "upload_session_lifetime_hours": 24
                      *     }
                      */
                     "application/json": components["schemas"]["Settings"];
@@ -6968,17 +6977,26 @@ export interface operations {
             content: {
                 /**
                  * @example {
-                 *       "upload_concurrency": 20
+                 *       "upload_concurrency": 20,
+                 *       "upload_request_timeout_seconds": 120,
+                 *       "upload_response_timeout_seconds": 150,
+                 *       "upload_session_lifetime_hours": 24
                  *     }
                  */
                 "application/json": {
                     /** @description Maximum simultaneous upload transfer requests per API instance. */
-                    upload_concurrency: number;
+                    upload_concurrency?: number;
+                    /** @description Seconds to receive one upload request body, measured after headers are accepted. Default 120. Applies to new upload requests. */
+                    upload_request_timeout_seconds?: number;
+                    /** @description Total seconds for one upload request including validation. Must be at least 30 seconds longer than upload_request_timeout_seconds. Default 150. Applies to new upload requests. */
+                    upload_response_timeout_seconds?: number;
+                    /** @description Hours allowed to complete a newly created resumable session. Default 24. Existing sessions retain their recorded expires_at. */
+                    upload_session_lifetime_hours?: number;
                 };
             };
         };
         responses: {
-            /** @description Saved upload limit and effective settings */
+            /** @description Saved upload settings and effective configuration */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7005,7 +7023,10 @@ export interface operations {
                      *       "signed_url_seconds": 900,
                      *       "encryption": "AES-256-GCM",
                      *       "editable": true,
-                     *       "upload_concurrency": 20
+                     *       "upload_concurrency": 20,
+                     *       "upload_request_timeout_seconds": 120,
+                     *       "upload_response_timeout_seconds": 150,
+                     *       "upload_session_lifetime_hours": 24
                      *     }
                      */
                     "application/json": components["schemas"]["Settings"];

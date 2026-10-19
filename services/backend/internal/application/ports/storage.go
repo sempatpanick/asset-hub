@@ -12,7 +12,8 @@ type UploadRepository interface {
 	Upload(context.Context, string) (domain.Upload, error)
 	Uploads(context.Context, domain.Principal, string, string, string, int, int) ([]domain.Upload, error)
 	RecordPart(context.Context, string, domain.UploadPart) error
-	BeginCompletion(context.Context, string) (domain.Upload, error)
+	ExtendUploadTransfer(context.Context, string, time.Time) error
+	BeginCompletion(context.Context, string, time.Time) (domain.Upload, error)
 	ResetCompletion(context.Context, string) error
 	CompleteUpload(context.Context, domain.Principal, domain.Upload, domain.StoredAsset) error
 	CancelUpload(context.Context, domain.Principal, string) error

@@ -231,7 +231,7 @@ func TestDurableIngestion(t *testing.T) {
 	if info, err := os.Stat(filepath.Join(backupRoot, "assets", asset.ID, "manifest.enc")); err != nil || info.Size() < 1 {
 		t.Fatal("recovery manifest missing")
 	}
-	repo.Pool.Exec(ctx, "UPDATE uploads SET ended_at=now()-interval '4 minutes' WHERE id=$1", upload.ID)
+	repo.Pool.Exec(ctx, "UPDATE uploads SET ended_at=now()-interval '4 minutes',transfer_until=now()-interval '1 second' WHERE id=$1", upload.ID)
 	if err = ingest.Cleanup(ctx); err != nil {
 		t.Fatal(err)
 	}

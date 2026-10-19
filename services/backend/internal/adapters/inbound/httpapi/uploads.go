@@ -4,13 +4,16 @@ import (
 	"assethub/internal/application/usecases"
 	"assethub/internal/domain"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"github.com/go-chi/chi/v5"
 	"io"
 	"net/http"
 	"strconv"
 	"sync"
+	"time"
 )
 
 // Keep the active count when the limit changes so lowering it never interrupts
@@ -38,19 +41,44 @@ func (g *transferGate) release() {
 
 func (s *Server) transferLimit(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		limit, err := s.service.UploadConcurrency(r.Context())
+		settings, err := s.service.UploadSettings(r.Context())
 		if err != nil {
 			s.fail(w, r, err)
 			return
 		}
-		if !s.transfers.acquire(limit) {
+		if !s.transfers.acquire(settings.Concurrency) {
 			w.Header().Set("Retry-After", "2")
 			reply(w, 429, map[string]any{"error": map[string]string{"code": "busy", "message": "Upload transfers are busy; retry shortly"}})
 			return
 		}
 		defer s.transfers.release()
-		next.ServeHTTP(w, r)
+		serveUpload(w, r, next, time.Duration(settings.RequestTimeoutSeconds)*time.Second, time.Duration(settings.ResponseTimeoutSeconds)*time.Second)
 	})
+}
+
+func (s *Server) uploadTimeout(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		settings, err := s.service.UploadSettings(r.Context())
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		serveUpload(w, r, next, time.Duration(settings.RequestTimeoutSeconds)*time.Second, time.Duration(settings.ResponseTimeoutSeconds)*time.Second)
+	})
+}
+
+func serveUpload(w http.ResponseWriter, r *http.Request, next http.Handler, readTimeout, responseTimeout time.Duration) {
+	controller := http.NewResponseController(w)
+	now := time.Now()
+	for _, err := range []error{controller.SetReadDeadline(now.Add(readTimeout)), controller.SetWriteDeadline(now.Add(responseTimeout))} {
+		if err != nil && !errors.Is(err, http.ErrNotSupported) {
+			reply(w, http.StatusInternalServerError, map[string]any{"error": map[string]string{"code": "internal_error", "message": "Unable to apply upload deadlines"}})
+			return
+		}
+	}
+	ctx, cancel := context.WithDeadline(r.Context(), now.Add(responseTimeout))
+	defer cancel()
+	next.ServeHTTP(w, r.WithContext(ctx))
 }
 func (s *Server) ingest(w http.ResponseWriter, r *http.Request) *usecases.Ingestion {
 	v := s.service.Ingestion()

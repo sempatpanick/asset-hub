@@ -153,7 +153,7 @@ curl -b cookies.txt 'https://assets.example.com/v1/projects'`}
         <li>
           POST /uploads with project_id, name and size_bytes. Optionally add a
           lowercase full-file SHA-256. Save the returned upload id, part_bytes
-          and expires_at (24 hours).
+          and expires_at (the saved session lifetime, default 24 hours).
         </li>
         <li>
           Split the file into part_bytes chunks (currently 8 MiB). Number them
@@ -220,9 +220,14 @@ curl -b cookies.txt 'https://assets.example.com/v1/projects'`}
         backups, retention is 0 and restoration returns 503. Keep the deleted
         asset id; workspace admins can use GET /assets?status=deleted to list
         deleted metadata. GET /settings reports actual feature availability and
-        upload_concurrency. Administrators can use PATCH /settings or the
-        dashboard Settings page to save an upload limit from 1 to 20 (default
-        20).
+        upload settings. Administrators can use PATCH /settings or the dashboard
+        Settings page to save concurrency from 1 to 20 (default 20), request
+        timeout from 30 to 1800 seconds (default 120), response timeout from 60
+        to 1830 seconds (default 150), and session lifetime from 1 to 168 hours
+        (default 24). Response timeout must be at least 30 seconds longer than
+        request timeout. Timeouts apply to new requests, and session lifetime
+        sets expiry for newly created sessions. Existing requests and sessions
+        keep their recorded deadlines.
       </p>
       <h2>Pagination, search and updates</h2>
       <p>

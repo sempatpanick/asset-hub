@@ -70,7 +70,11 @@ func (i *Ingestion) Create(ctx context.Context, p domain.Principal, project, nam
 			return domain.Upload{}, domain.ErrUnavailable
 		}
 	}
-	u := domain.Upload{ID: i.auth.security.ID(), ProjectID: project, Name: n, Size: size, Status: "receiving", ExpectedSHA256: hash, Parts: []domain.UploadPart{}, CreatedAt: i.auth.clock.Now(), ExpiresAt: i.auth.clock.Now().Add(24 * time.Hour)}
+	settings, err := i.auth.UploadSettings(ctx)
+	if err != nil {
+		return domain.Upload{}, err
+	}
+	u := domain.Upload{ID: i.auth.security.ID(), ProjectID: project, Name: n, Size: size, Status: "receiving", ExpectedSHA256: hash, Parts: []domain.UploadPart{}, CreatedAt: i.auth.clock.Now(), ExpiresAt: i.auth.clock.Now().Add(time.Duration(settings.SessionLifetimeHours) * time.Hour)}
 	capacity := i.capacity
 	if !i.BackupEnabled() {
 		capacity /= 2
@@ -117,6 +121,13 @@ func (i *Ingestion) PutPart(ctx context.Context, p domain.Principal, id string, 
 		}
 	}
 	part := domain.UploadPart{Index: index, Size: n, SHA256: hash}
+	until, err := i.uploadTransferUntil(ctx)
+	if err != nil {
+		return err
+	}
+	if err = i.repo.ExtendUploadTransfer(ctx, id, until); err != nil {
+		return err
+	}
 	if err = i.stage.Put(ctx, id, part, body); err != nil {
 		return err
 	}
@@ -130,8 +141,8 @@ func (i *Ingestion) Cancel(ctx context.Context, p domain.Principal, id string) e
 	if err = i.repo.CancelUpload(ctx, p, u.ID); err != nil {
 		return err
 	}
-	// Cleanup is retried by the worker if the filesystem is unavailable.
-	_ = i.stage.Remove(id) // Final cleanup waits for bounded in-flight HTTP transfers to finish.
+	// The worker removes staging after the persisted transfer deadline, including
+	// when a cancelled request is still receiving bytes under an older setting.
 	return nil
 }
 func (i *Ingestion) Complete(ctx context.Context, p domain.Principal, id string) (domain.Asset, error) {
@@ -146,9 +157,13 @@ func (i *Ingestion) Complete(ctx context.Context, p domain.Principal, id string)
 		a, err := i.repo.Asset(ctx, u.AssetID)
 		return a.Asset, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	until, err := i.uploadTransferUntil(ctx)
+	if err != nil {
+		return domain.Asset{}, err
+	}
+	ctx, cancel := context.WithDeadline(ctx, until.Add(-30*time.Second))
 	defer cancel()
-	u, err = i.repo.BeginCompletion(ctx, id)
+	u, err = i.repo.BeginCompletion(ctx, id, until)
 	if err != nil {
 		return domain.Asset{}, err
 	}
@@ -206,6 +221,19 @@ func (i *Ingestion) Complete(ctx context.Context, p domain.Principal, id string)
 	// Redis enqueue is an optimization. The database outbox always remains authoritative.
 	_ = i.queue.Push(ctx, []string{a.ID})
 	return a.Asset, nil
+}
+
+// Persist the deadline observed by this request, so later setting changes cannot
+// let cleanup or another completion race an older, longer-running transfer.
+func (i *Ingestion) uploadTransferUntil(ctx context.Context) (time.Time, error) {
+	if deadline, ok := ctx.Deadline(); ok {
+		return deadline.Add(30 * time.Second), nil
+	}
+	settings, err := i.auth.UploadSettings(ctx)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return i.auth.clock.Now().Add(time.Duration(settings.ResponseTimeoutSeconds+30) * time.Second), nil
 }
 func (i *Ingestion) readPart(ctx context.Context, id string, part domain.UploadPart) ([]byte, error) {
 	if err := ctx.Err(); err != nil {

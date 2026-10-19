@@ -1498,7 +1498,7 @@ tr:last-child td {
   font-weight: 500;
 }
 .upload-settings p {
-  color: var(--muted);
+  color: #626d7f;
   font-size: 12px;
   line-height: 1.6;
 }
@@ -1509,13 +1509,26 @@ tr:last-child td {
   gap: 12px;
   margin: 16px 0 10px;
 }
-.upload-settings-controls input {
+.upload-settings-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+.upload-settings-fields input {
   width: 100px;
   min-height: 44px;
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   font: inherit;
+}
+.upload-settings .upload-settings-error {
+  color: #b42318;
+}
+@media (max-width: 600px) {
+  .upload-settings-fields {
+    grid-template-columns: 1fr;
+  }
 }
 .settings-grid {
   display: grid;

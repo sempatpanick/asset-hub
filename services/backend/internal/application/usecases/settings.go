@@ -5,16 +5,13 @@ import (
 	"context"
 )
 
-func (s *Service) UploadConcurrency(ctx context.Context) (int, error) {
-	return s.repo.UploadConcurrency(ctx)
+func (s *Service) UploadSettings(ctx context.Context) (domain.UploadSettings, error) {
+	return s.repo.UploadSettings(ctx)
 }
 
-func (s *Service) UpdateUploadConcurrency(ctx context.Context, p domain.Principal, limit int) error {
+func (s *Service) UpdateUploadSettings(ctx context.Context, p domain.Principal, patch domain.UploadSettingsPatch) error {
 	if !p.IsAdmin() {
 		return domain.ErrForbidden
 	}
-	if limit < 1 || limit > 20 {
-		return domain.ErrInvalid
-	}
-	return s.repo.UpdateUploadConcurrency(ctx, p, limit)
+	return s.repo.UpdateUploadSettings(ctx, p, patch)
 }

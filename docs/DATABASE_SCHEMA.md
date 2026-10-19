@@ -10,8 +10,8 @@ PostgreSQL is authoritative. UUIDs identify records; timestamps are UTC; sizes a
 | projects           | Name, description, creator and logical quota                                                                                                                      |
 | project_members    | Unique project/user with manager/editor/viewer role                                                                                                               |
 | api_keys           | Scoped project key hash, visible prefix, expiry and revocation                                                                                                    |
-| workspace_settings | Singleton row holding the concurrent upload limit (1–20, default 20); changes are audited                                                                         |
-| uploads            | Reserved size, project/actor, name, optional expected hash, state, 24-hour expiry, completion lease and cleanup timestamps                                        |
+| workspace_settings | Singleton row holding upload concurrency, request/response timeouts and new-session lifetime; changes are validated and audited                                   |
+| uploads            | Reserved size, project/actor, name, optional expected hash, state, configured expiry, completion lease, transfer deadline and cleanup timestamps                  |
 | upload_parts       | Immutable unique upload/index with exact size and SHA-256; staging paths derive from server UUID/index/hash                                                       |
 | assets             | Detected MIME, original size/hash, lifecycle/visibility, upload/provider, versioned wrapped key, sanitized error, content version and deletion/backup-purge state |
 | asset_chunks       | Unique asset/index, plaintext/ciphertext sizes, ciphertext hash, encrypted provider reference and best-effort purge status                                        |

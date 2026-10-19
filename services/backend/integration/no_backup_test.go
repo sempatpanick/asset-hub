@@ -126,7 +126,7 @@ func TestIngestionWithoutBackup(t *testing.T) {
 	if err != nil || !bytes.Equal(actual, data[start:end+1]) {
 		t.Fatal("signed range differs", err)
 	}
-	if _, err = repo.Pool.Exec(ctx, "UPDATE uploads SET ended_at=now()-interval '4 minutes' WHERE id=$1", upload.ID); err != nil {
+	if _, err = repo.Pool.Exec(ctx, "UPDATE uploads SET ended_at=now()-interval '4 minutes',transfer_until=now()-interval '1 second' WHERE id=$1", upload.ID); err != nil {
 		t.Fatal(err)
 	}
 	if err = ingest.Cleanup(ctx); err != nil {

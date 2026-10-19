@@ -163,3 +163,132 @@ test("saved upload limits control parallel transfers and pause/resume", async ({
     (await (await page.request.get("/v1/settings")).json()).upload_concurrency,
   ).toBe(20);
 });
+
+test("upload timeout settings validate, persist and set new session expiry", async ({
+  page,
+  signInAdmin,
+}) => {
+  const csrf = await signInAdmin();
+  const headers = { Origin: "http://127.0.0.1:18080", "X-CSRF-Token": csrf };
+  const requestTimeout = () =>
+    page.getByLabel("Upload request timeout (seconds)", { exact: true });
+  const responseTimeout = () =>
+    page.getByLabel("Upload response timeout (seconds)", { exact: true });
+  const lifetime = () =>
+    page.getByLabel("Resumable session lifetime (hours)", { exact: true });
+  await page.goto("/settings/");
+  await expect(requestTimeout()).toHaveValue("120");
+  await expect(responseTimeout()).toHaveValue("150");
+  await expect(lifetime()).toHaveValue("24");
+  await requestTimeout().fill("300");
+  await responseTimeout().fill("329");
+  await page.getByRole("button", { name: "Save upload settings" }).click();
+  await expect(
+    page.locator("#upload_response_timeout_seconds-error"),
+  ).toHaveText(
+    "Response timeout must be at least 30 seconds longer than request timeout.",
+  );
+  await expect(responseTimeout()).toBeFocused();
+  await responseTimeout().fill("360");
+  await lifetime().fill("169");
+  await page.getByRole("button", { name: "Save upload settings" }).click();
+  await expect(page.locator("#upload_session_lifetime_hours-error")).toHaveText(
+    "Enter a whole number from 1 to 168.",
+  );
+  await lifetime().fill("48");
+  await page.getByRole("button", { name: "Save upload settings" }).click();
+  await expect(page.getByRole("status")).toHaveText("Upload settings saved.");
+  await page.reload();
+  await expect(requestTimeout()).toHaveValue("300");
+  await expect(responseTimeout()).toHaveValue("360");
+  await expect(lifetime()).toHaveValue("48");
+  const saved = await (await page.request.get("/v1/settings")).json();
+  expect(saved).toMatchObject({
+    upload_request_timeout_seconds: 300,
+    upload_response_timeout_seconds: 360,
+    upload_session_lifetime_hours: 48,
+  });
+  const projectResponse = await page.request.post("/v1/projects", {
+    headers,
+    data: { name: `Timeout browser ${Date.now()}`, quota_bytes: 1 << 20 },
+  });
+  expect(projectResponse.status()).toBe(201);
+  const project = await projectResponse.json();
+  const keyResponse = await page.request.post("/v1/api-keys", {
+    headers,
+    data: {
+      project_id: project.id,
+      name: "Timeout session writer",
+      scopes: ["assets:read", "assets:write"],
+    },
+  });
+  expect(keyResponse.status()).toBe(201);
+  const key = await keyResponse.json();
+  const createSession = async () => {
+    const response = await page.request.post("/v1/uploads", {
+      headers: { Authorization: `Bearer ${key.secret}` },
+      data: {
+        project_id: project.id,
+        name: "timeout-session.txt",
+        size_bytes: 1,
+      },
+    });
+    expect(response.status()).toBe(201);
+    const createdSession = (await response.json()) as { id: string };
+    const persisted = await page.request.get(
+      `/v1/uploads/${createdSession.id}`,
+      {
+        headers: { Authorization: `Bearer ${key.secret}` },
+      },
+    );
+    expect(persisted.status()).toBe(200);
+    return (await persisted.json()) as {
+      id: string;
+      created_at: string;
+      expires_at: string;
+    };
+  };
+  try {
+    const original = await createSession();
+    expect(
+      (Date.parse(original.expires_at) - Date.parse(original.created_at)) /
+        3600000,
+    ).toBeCloseTo(48, 3);
+    await lifetime().fill("1");
+    await page.getByRole("button", { name: "Save upload settings" }).click();
+    await expect(page.getByRole("status")).toHaveText("Upload settings saved.");
+    const fresh = await createSession();
+    expect(
+      (Date.parse(fresh.expires_at) - Date.parse(fresh.created_at)) / 3600000,
+    ).toBeCloseTo(1, 3);
+    const inspected = await page.request.get(`/v1/uploads/${original.id}`, {
+      headers: { Authorization: `Bearer ${key.secret}` },
+    });
+    expect(inspected.status()).toBe(200);
+    expect((await inspected.json()).expires_at).toBe(original.expires_at);
+    await page.screenshot({
+      path: ".local/screenshots/upload-timeouts-desktop.png",
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: ".local/screenshots/upload-timeouts-mobile.png",
+      fullPage: true,
+    });
+  } finally {
+    const restored = await page.request.patch("/v1/settings", {
+      headers,
+      data: {
+        upload_request_timeout_seconds: 120,
+        upload_response_timeout_seconds: 150,
+        upload_session_lifetime_hours: 24,
+      },
+    });
+    expect(restored.status()).toBe(200);
+  }
+});
