@@ -5,7 +5,7 @@ $taskEnvPath=Join-Path $taskRoot '.local/test.env'
 if(-not(Test-Path -LiteralPath $taskEnvPath)){throw 'Create .local/test.env with a unique TEST_POSTGRES_PASSWORD, then start deploy/compose.test.yaml.'}
 $taskPassword=(Get-Content -LiteralPath $taskEnvPath | Where-Object {$_ -like 'TEST_POSTGRES_PASSWORD=*'}).Substring(23)
 $env:TEST_DATABASE_URL='postgres://assethub:'+$taskPassword+'@127.0.0.1:'+$Port+'/postgres?sslmode=disable'
-$env:GOTOOLCHAIN='go1.27.2'
+$env:GOTOOLCHAIN='go1.27.3'
 $env:TEST_REDIS_URL='redis://127.0.0.1:56380/11'
 $taskPgBin=Join-Path $taskRoot '.local/pg-runtime/pgsql/bin'
 if(Test-Path -LiteralPath (Join-Path $taskPgBin 'pg_dump.exe')){

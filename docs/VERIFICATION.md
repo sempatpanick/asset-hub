@@ -2,9 +2,9 @@
 
 ## Commands
 
-At the repository root with pnpm 12.10.1: `pnpm install --frozen-lockfile`, `pnpm run generate:api`, `pnpm run format:check`, `pnpm run typecheck`, `pnpm run lint`, `pnpm run build`, `pnpm audit --audit-level=high`, `pnpm test`. Apply frontend/tooling formatting with `pnpm run format`. Type checking covers the dashboard, API client and Playwright tests/configuration. Historical npm results below describe the pre-migration implementation.
+At the repository root with pnpm 12.15.0: `pnpm install --frozen-lockfile`, `pnpm run generate:api`, `pnpm run format:check`, `pnpm run typecheck`, `pnpm run lint`, `pnpm run build`, `pnpm audit --audit-level=high`, `pnpm test`. Apply frontend/tooling formatting with `pnpm run format`. Type checking covers the dashboard, API client and Playwright tests/configuration. Historical npm results below describe the pre-migration implementation.
 
-From services/backend with Go 1.27.2: `gofmt -w <changed Go files>`, verify `gofmt -l .` is empty, then `go build ./...`, `go vet ./...`, `go test ./...`. Architecture tests reject outward/framework dependencies from domain/application. API, administrator and worker binaries cross-compile with `CGO_ENABLED=0 GOOS=linux GOARCH=arm64`. AGENTS.md makes these checks mandatory for affected code changes. The combined `sh scripts/test.sh` also runs the frontend browser suite; start its disposable fixture beforehand. Database-backed Go tests require the integration environment described below; otherwise those tests explicitly skip.
+From services/backend with Go 1.27.3: `gofmt -w <changed Go files>`, verify `gofmt -l .` is empty, then `go build ./...`, `go vet ./...`, `go test ./...`. Architecture tests reject outward/framework dependencies from domain/application. API, administrator and worker binaries cross-compile with `CGO_ENABLED=0 GOOS=linux GOARCH=arm64`. AGENTS.md makes these checks mandatory for affected code changes. The combined `sh scripts/test.sh` also runs the frontend browser suite; start its disposable fixture beforehand. Database-backed Go tests require the integration environment described below; otherwise those tests explicitly skip.
 
 ## Persistent integration tests
 
@@ -181,3 +181,17 @@ Three real-socket tests verify extending ordinary server read/write deadlines, i
 All twelve main Playwright workflows passed together against a fresh disposable PostgreSQL/Redis fixture. The new workflow validates field bounds and the response grace period, saves/reloads settings, creates sessions using a real project key, confirms the configured expiry and checks that an earlier session retains its expiry. Desktop/mobile screenshots were inspected. No production migration or deployment was performed.
 
 The separate primary-only Playwright workflow passed against a fresh `BACKUP_ENABLED=false` fixture, with the flag also supplied to the test runner. Both browser fixtures shut down cleanly, and the dedicated PostgreSQL/Redis containers were removed after verification.
+
+## Dependency refresh — 2026-10-28
+
+Updated the JavaScript workspace and its compatible transitive dependencies, Go modules, pnpm 12.15.0 and Go 1.27.3. The web and verification Dockerfiles and CI now pin Node.js 26.12.1, the latest stable release in the official release index on this date, with refreshed multi-platform image digests. Playwright's verification image matches package version 1.64.1. The API documentation generator uses js-yaml 5's named `load` export. The existing ESLint 9 and root TypeScript 5 compatibility exceptions remain documented in `docs/DEPENDENCIES.md`; strict peer checking remains enabled.
+
+Frozen pnpm installation, changed-file formatting, full frontend/tooling type checks, zero-warning lint, API client/docs generation and freshness, and the static production build passed with the final lockfile. Refreshing transitive packages updated Zod to 4.6.7; both the full tooling audit and production audit report no known vulnerabilities. All 40 deployment-helper tests passed without skips. Actionlint, shell formatting, ShellCheck, PowerShell syntax and verification Compose configuration checks passed.
+
+Go 1.27.3 formatting checks for tracked Go sources, explicit build, vet and fresh `go test -count=1 -v ./...` passed. The suite used only dedicated PostgreSQL 18.6 and Redis 8.10.2 services, with no skipped tests. Persistent integration covered all seven migrations, runtime-role privileges and the actual PostgreSQL snapshot/offline-key recovery drill.
+
+All twelve main Playwright workflows passed together against a fresh disposable PostgreSQL/Redis-backed fixture. The separate primary-only workflow also passed against a fresh fixture with `BACKUP_ENABLED=false` supplied to the runner. Both browser fixtures stopped cleanly, and the dedicated test containers and network were removed.
+
+Both complete source Docker builds passed: API/admin/worker for Linux ARM64 and the static frontend/Nginx image for Linux AMD64, tagged `dependencies-20261028` under the existing `assethub-verification` repositories. These are local test and image-build results; no production deployment or published CI run was performed.
+
+The Linux AMD64 verification-tooling Dockerfile also passed a complete [cache-only test build](https://docs.docker.com/build/exporters/#cache-only-export). A final build stage asserted the actual Node 26.12.1, pnpm 12.15.0, Go 1.27.3 and Playwright 1.64.1 versions inside the verifier filesystem. Its Go and Node toolchains now use independent `COPY --link` layers for cache reuse. The ordinary image-export attempt was stopped after prolonged Docker layer-export delay; no loadable verifier-image artifact is claimed. The application images above were fully exported, and the web image passed `nginx -t` with the required API hostname supplied.

@@ -8,18 +8,18 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "next": "16.4.0",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
-    "lucide-react": "1.53.0",
-    "@assethub/api-client": "workspace:*"
+    "@assethub/api-client": "workspace:*",
+    "lucide-react": "1.61.0",
+    "next": "16.4.3",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
   },
   "devDependencies": {
-    "typescript": "7.0.2",
-    "tailwindcss": "4.3.3",
     "@tailwindcss/postcss": "4.3.3",
+    "@types/node": "26.6.5",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
-    "@types/node": "26.6.4"
+    "tailwindcss": "4.3.3",
+    "typescript": "7.0.2"
   }
 }

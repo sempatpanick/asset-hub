@@ -1,7 +1,7 @@
-FROM --platform=$BUILDPLATFORM node:26.11.1-alpine3.23@sha256:f1394b3ffc021bc3f4aaf363e70a8d9667f7a9a63538bc824d7cc583129fffad AS build
+FROM --platform=$BUILDPLATFORM node:26.12.1-alpine3.23@sha256:bc2b334006f15c7167bbeb2f08f28c2df883f7594a0470e04454ebe7560cfe68 AS build
 WORKDIR /src
 # Bootstrap the pinned package manager; all project installs use pnpm.
-RUN npm install --global pnpm@12.10.1
+RUN npm install --global pnpm@12.15.0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json ./apps/web/package.json
 COPY packages/api-client/package.json ./packages/api-client/package.json

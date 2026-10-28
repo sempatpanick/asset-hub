@@ -1,5 +1,5 @@
 import { readFile, mkdir, writeFile } from "node:fs/promises";
-import yaml from "js-yaml";
+import { load } from "js-yaml";
 import { format } from "prettier";
 
 // The website imports this same downloadable contract; no independent endpoint list.
@@ -7,7 +7,7 @@ const source = await readFile(
   new URL("../api/openapi.yaml", import.meta.url),
   "utf8",
 );
-const contract = yaml.load(source);
+const contract = load(source);
 for (const item of Object.values(contract.paths)) {
   for (const operation of Object.values(item)) {
     if (!operation.operationId) continue;
