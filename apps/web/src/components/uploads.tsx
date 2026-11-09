@@ -7,6 +7,29 @@ import { mutate, request, uploadPart } from "@/infrastructure/api/client";
 import { bytes, useResource, useDebounced } from "@/features/hooks";
 import { Badge, Empty, ErrorNotice, Loading, Modal } from "./ui";
 import { Pagination, TableSearch } from "./table-controls";
+import Image from "next/image";
+import { FileIcon } from "./dashboard";
+import { safeImage, safeImageName, assetContent } from "./asset-details";
+
+function TransferPreview({ file }: { file: File }) {
+  const [url] = useState(() =>
+    safeImage(file.type) ? URL.createObjectURL(file) : undefined,
+  );
+  useEffect(() => {
+    return () => {
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [url]);
+  if (url) {
+    return (
+      <span className="file-thumbnail">
+        {/* ponytail: unoptimized preview for local blob URL */}
+        <Image src={url} alt="" width={34} height={36} unoptimized />
+      </span>
+    );
+  }
+  return <FileIcon mime={file.type || "application/octet-stream"} />;
+}
 
 type Transfer = { file: File; status: string; loaded: number; error?: string };
 export function UploadDialog({
@@ -239,7 +262,10 @@ export function UploadDialog({
         {transfers.map((v, index) => (
           <div className="transfer" key={`${v.file.name}:${index}`}>
             <div className="transfer-top">
-              <strong>{v.file.name}</strong>
+              <div className="file-name">
+                <TransferPreview file={v.file} />
+                <strong>{v.file.name}</strong>
+              </div>
               <Badge tone={v.status === "queued" ? "mint" : "blue"}>
                 {v.status}
               </Badge>
@@ -297,10 +323,12 @@ export function UploadHistory({
   enabled,
   onUpload,
   projects,
+  onSelectAsset,
 }: {
   enabled: boolean;
   onUpload: () => void;
   projects: Project[];
+  onSelectAsset?: (asset: Asset) => void;
 }) {
   const [search, setSearch] = useState("");
   const query = useDebounced(search);
@@ -435,12 +463,107 @@ export function UploadHistory({
                 return (
                   <tr key={u.id}>
                     <td>
-                      <strong>{u.name}</strong>
-                      {u.error_code && (
-                        <small className="job-error">
-                          {u.error_code.replaceAll("_", " ")}
-                        </small>
-                      )}
+                      <div className="file-name">
+                        {u.asset_id &&
+                        (status === "ready" || u.asset_status === "ready") &&
+                        safeImageName(u.name) ? (
+                          <span
+                            className="file-thumbnail"
+                            onClick={() =>
+                              onSelectAsset?.({
+                                id: u.asset_id,
+                                project_id: u.project_id,
+                                name: u.name,
+                                mime: "image/png",
+                                size_bytes: u.size_bytes,
+                                sha256: "",
+                                status: u.asset_status || status,
+                                visibility: "private",
+                                created_at: u.created_at,
+                              })
+                            }
+                            style={{
+                              cursor:
+                                u.asset_id && onSelectAsset
+                                  ? "pointer"
+                                  : "default",
+                            }}
+                          >
+                            {/* ponytail: small unoptimized thumbnail in upload table; responsive srcset when scaling */}
+                            <Image
+                              src={assetContent(u.asset_id)}
+                              alt=""
+                              width={34}
+                              height={36}
+                              unoptimized
+                            />
+                          </span>
+                        ) : (
+                          <span
+                            onClick={() =>
+                              u.asset_id &&
+                              onSelectAsset?.({
+                                id: u.asset_id,
+                                project_id: u.project_id,
+                                name: u.name,
+                                mime: safeImageName(u.name)
+                                  ? "image/png"
+                                  : "application/octet-stream",
+                                size_bytes: u.size_bytes,
+                                sha256: "",
+                                status: u.asset_status || status,
+                                visibility: "private",
+                                created_at: u.created_at,
+                              })
+                            }
+                            style={{
+                              cursor:
+                                u.asset_id && onSelectAsset
+                                  ? "pointer"
+                                  : "default",
+                            }}
+                          >
+                            <FileIcon
+                              mime={
+                                safeImageName(u.name)
+                                  ? "image/png"
+                                  : "application/octet-stream"
+                              }
+                            />
+                          </span>
+                        )}
+                        <div>
+                          {u.asset_id && onSelectAsset ? (
+                            <button
+                              className="asset-name-button"
+                              onClick={() =>
+                                onSelectAsset({
+                                  id: u.asset_id,
+                                  project_id: u.project_id,
+                                  name: u.name,
+                                  mime: safeImageName(u.name)
+                                    ? "image/png"
+                                    : "application/octet-stream",
+                                  size_bytes: u.size_bytes,
+                                  sha256: "",
+                                  status: u.asset_status || status,
+                                  visibility: "private",
+                                  created_at: u.created_at,
+                                })
+                              }
+                            >
+                              {u.name}
+                            </button>
+                          ) : (
+                            <strong>{u.name}</strong>
+                          )}
+                          {u.error_code && (
+                            <small className="job-error">
+                              {u.error_code.replaceAll("_", " ")}
+                            </small>
+                          )}
+                        </div>
+                      </div>
                     </td>
                     <td>{bytes(u.size_bytes)}</td>
                     <td>

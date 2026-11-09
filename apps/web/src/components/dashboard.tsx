@@ -75,7 +75,7 @@ const date = (value: string) =>
     hour: "2-digit",
     minute: "2-digit",
   });
-function FileIcon({ mime }: { mime: string }) {
+export function FileIcon({ mime }: { mime: string }) {
   const Icon = mime.startsWith("image/")
     ? FileImage
     : mime.startsWith("video/")
@@ -404,6 +404,7 @@ function DashboardContent({
                 data={overview.data}
                 health={health.data?.items}
                 onProject={() => setModal("project")}
+                onSelect={setSelectedAsset}
               />
             )
           )}
@@ -664,6 +665,7 @@ function DashboardContent({
             projects={allProjects}
             enabled={!!settings.data?.features.uploads}
             onUpload={() => setModal("upload")}
+            onSelectAsset={setSelectedAsset}
           />
         </>
       )}
@@ -1188,11 +1190,13 @@ function OverviewView({
   data,
   health,
   onProject,
+  onSelect,
 }: {
   backupEnabled: boolean;
   data: Overview;
   health?: Health[];
   onProject: () => void;
+  onSelect?: (asset: Asset) => void;
 }) {
   const max = Math.max(4, ...data.activity.map((a) => a.count));
   const total = data.activity.reduce((sum, a) => sum + a.count, 0);
@@ -1311,7 +1315,7 @@ function OverviewView({
             <LinkAction href="/files/">View all files</LinkAction>
           </div>
           {data.recent.length ? (
-            <AssetList assets={data.recent} controls />
+            <AssetList assets={data.recent} controls onSelect={onSelect} />
           ) : (
             <Empty
               title="A home for your first asset"
@@ -1498,7 +1502,29 @@ function AssetList({
               <tr key={a.id}>
                 <td>
                   <div className="file-name">
-                    <FileIcon mime={a.mime} />
+                    {a.status === "ready" && safeImage(a.mime) ? (
+                      <span
+                        className="file-thumbnail"
+                        onClick={() => onSelect?.(a)}
+                        style={{ cursor: onSelect ? "pointer" : "default" }}
+                      >
+                        {/* ponytail: small unoptimized thumbnail in table; responsive srcset when scaling */}
+                        <Image
+                          src={assetContent(a.id)}
+                          alt=""
+                          width={34}
+                          height={36}
+                          unoptimized
+                        />
+                      </span>
+                    ) : (
+                      <span
+                        onClick={() => onSelect?.(a)}
+                        style={{ cursor: onSelect ? "pointer" : "default" }}
+                      >
+                        <FileIcon mime={a.mime} />
+                      </span>
+                    )}
                     <div>
                       {onSelect ? (
                         <button

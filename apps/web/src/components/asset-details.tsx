@@ -25,6 +25,9 @@ export function safeImage(mime: string) {
 export function safeVideo(mime: string) {
   return ["video/mp4", "video/webm", "video/ogg"].includes(mime);
 }
+export function safeImageName(name: string) {
+  return /\.(png|jpe?g|gif|webp|avif)$/i.test(name);
+}
 export function assetContent(id: string) {
   return `/v1/assets/${encodeURIComponent(id)}/content`;
 }
