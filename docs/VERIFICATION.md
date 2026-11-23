@@ -2,9 +2,9 @@
 
 ## Commands
 
-At the repository root with pnpm 12.15.0: `pnpm install --frozen-lockfile`, `pnpm run generate:api`, `pnpm run format:check`, `pnpm run typecheck`, `pnpm run lint`, `pnpm run build`, `pnpm audit --audit-level=high`, `pnpm test`. Apply frontend/tooling formatting with `pnpm run format`. Type checking covers the dashboard, API client and Playwright tests/configuration. Historical npm results below describe the pre-migration implementation.
+At the repository root with pnpm 12.21.0: `pnpm install --frozen-lockfile`, `pnpm run generate:api`, `pnpm run format:check`, `pnpm run typecheck`, `pnpm run lint`, `pnpm run build`, `pnpm audit --audit-level=high`, `pnpm test`. Apply frontend/tooling formatting with `pnpm run format`. Type checking covers the dashboard, API client and Playwright tests/configuration. Historical npm results below describe the pre-migration implementation.
 
-From services/backend with Go 1.27.3: `gofmt -w <changed Go files>`, verify `gofmt -l .` is empty, then `go build ./...`, `go vet ./...`, `go test ./...`. Architecture tests reject outward/framework dependencies from domain/application. API, administrator and worker binaries cross-compile with `CGO_ENABLED=0 GOOS=linux GOARCH=arm64`. AGENTS.md makes these checks mandatory for affected code changes. The combined `sh scripts/test.sh` also runs the frontend browser suite; start its disposable fixture beforehand. Database-backed Go tests require the integration environment described below; otherwise those tests explicitly skip.
+From services/backend with Go 1.27.4: `gofmt -w <changed Go files>`, verify `gofmt -l .` is empty, then `go build ./...`, `go vet ./...`, `go test ./...`. Architecture tests reject outward/framework dependencies from domain/application. API, administrator and worker binaries cross-compile with `CGO_ENABLED=0 GOOS=linux GOARCH=arm64`. AGENTS.md makes these checks mandatory for affected code changes. The combined `sh scripts/test.sh` also runs the frontend browser suite; start its disposable fixture beforehand. Database-backed Go tests require the integration environment described below; otherwise those tests explicitly skip.
 
 ## Persistent integration tests
 
