@@ -17,7 +17,7 @@ jobs:
         working-directory: services/backend
     services:
       postgres:
-        image: postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+        image: postgres:19.0-alpine@sha256:8b0ff4cdf221f0c53d7fcda681d3b461be725c492cd881c5ec9c0ad25023f188
         env:
           POSTGRES_USER: assethub
           POSTGRES_PASSWORD: ci-disposable-password
@@ -27,7 +27,7 @@ jobs:
           --health-cmd "pg_isready -U assethub"
           --health-interval 5s --health-timeout 5s --health-retries 20
       redis:
-        image: redis:8.10.2-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
+        image: redis:8.10.3-alpine@sha256:7958cfbb9d152f87dadfbc89f1b0b15938f0b81ff8982feb327476f4911935c3
         ports: ["56380:6379"]
         options: >-
           --health-cmd "redis-cli ping"
@@ -35,12 +35,12 @@ jobs:
     env:
       TEST_DATABASE_URL: postgres://assethub:ci-disposable-password@127.0.0.1:55433/postgres?sslmode=disable
       TEST_REDIS_URL: redis://127.0.0.1:56380/11
-      TEST_POSTGRES_IMAGE: postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+      TEST_POSTGRES_IMAGE: postgres:19.0-alpine@sha256:8b0ff4cdf221f0c53d7fcda681d3b461be725c492cd881c5ec9c0ad25023f188
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: services/backend/go.mod
           cache-dependency-path: services/backend/go.sum
@@ -91,7 +91,7 @@ jobs:
     timeout-minutes: 25
     services:
       postgres:
-        image: postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+        image: postgres:19.0-alpine@sha256:8b0ff4cdf221f0c53d7fcda681d3b461be725c492cd881c5ec9c0ad25023f188
         env:
           POSTGRES_USER: assethub
           POSTGRES_PASSWORD: ci-disposable-password
@@ -100,7 +100,7 @@ jobs:
           --health-cmd "pg_isready -U assethub"
           --health-interval 5s --health-timeout 5s --health-retries 20
       redis:
-        image: redis:8.10.2-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
+        image: redis:8.10.3-alpine@sha256:7958cfbb9d152f87dadfbc89f1b0b15938f0b81ff8982feb327476f4911935c3
         ports: ["56380:6379"]
         options: >-
           --health-cmd "redis-cli ping"
@@ -112,13 +112,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "26.12.1"
+          node-version: "26.13.1"
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: services/backend/go.mod
           cache-dependency-path: services/backend/go.sum
@@ -175,7 +175,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: services/backend/go.mod
           cache-dependency-path: services/backend/go.sum
