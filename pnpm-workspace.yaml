@@ -10,6 +10,3 @@ allowBuilds:
   sharp: true
   # Native TypeScript import resolution used by ESLint.
   unrs-resolver: true
-
-minimumReleaseAgeExclude:
-  - "@types/node@26.6.5"

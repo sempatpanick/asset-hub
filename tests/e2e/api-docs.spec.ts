@@ -31,10 +31,11 @@ const documented = Object.entries(spec.paths).flatMap(([path, item]) =>
 const consolePanel = (page: Page) =>
   page.getByRole("region", { name: "Request console", exact: true });
 async function operation(page: Page, id: string) {
-  await page
+  const link = page
     .getByRole("navigation", { name: "API endpoints" })
-    .locator(`a[href="#${id}"]`)
-    .click();
+    .locator(`a[href="#${id}"]`);
+  await link.click();
+  await expect(link).toHaveAttribute("aria-current", "page");
   await expect(consolePanel(page)).toBeVisible();
 }
 async function send(page: Page, status: number) {
