@@ -40,6 +40,31 @@ Downloads refresh a 150-second write deadline as bytes flow, allowing large acti
 
 Run `sudo bash scripts/backup.sh .env /mnt/assethub-backup` nightly using an operator-managed systemd timer. It writes an atomic custom-format PostgreSQL snapshot with a checksum and restricted permissions. It does not delete previous snapshots automatically. Manage snapshot retention against verified recovery requirements. Keep a separate protected copy of Compose/configuration and offline keys. Never publish `.env` or snapshots.
 
+### PostgreSQL 18 to 19
+
+Existing installs default to PostgreSQL 18.7. PostgreSQL 19 uses a different data format, so migrate to a separate data directory during a maintenance window. PostgreSQL 19.0 is the version used by the disposable test fixtures.
+
+1. Pause the deployment and backup timers, stop external writers, and use the active project's Compose files to stop `web`, `api`, and `worker`. Keep PostgreSQL 18 running for the final backup. Run the backup script, verify its checksum, and keep the snapshot, the original PostgreSQL directory, and the offline installation keys.
+2. Start a temporary PostgreSQL 19 instance using the command below. Choose an unused loopback port and a new absolute directory on the database filesystem. The temporary project uses the same database owner and database names from the normal Compose configuration.
+
+   ```sh
+   task_pg_image=postgres:19.0-alpine@sha256:8b0ff4cdf221f0c53d7fcda681d3b461be725c492cd881c5ec9c0ad25023f188
+   task_pg_root=/srv/assethub/postgres-19
+   pg19() {
+     POSTGRES_IMAGE="$task_pg_image" POSTGRES_DATA_ROOT="$task_pg_root" POSTGRES_PORT=55434 \
+       docker compose --env-file .env -f deploy/compose.yaml -p assethub-pg19 "$@"
+   }
+   pg19 up -d --wait --no-deps postgres
+   pg19 exec -T postgres pg_restore -U assethub -d assethub \
+     --no-owner --no-acl --exit-on-error --single-transaction < "$task_snapshot"
+   pg19 exec -T postgres psql -U assethub -d assethub -v ON_ERROR_STOP=1 -c 'ANALYZE'
+   pg19 down
+   ```
+
+   Set `task_snapshot` to the verified final snapshot path before restoring. If the restore fails, leave writers stopped until recovery or rollback is decided.
+3. Stop the PostgreSQL 18 service in the active project. Set `POSTGRES_IMAGE` and `POSTGRES_DATA_ROOT` in its protected `.env` to the values used above. Use the normal deployment process to start the active project and run the migrator. It reapplies the restricted `assethub_api` role and grants using `APP_DATABASE_PASSWORD`.
+4. Verify readiness, sign-in, reads of existing assets and a database-backed write before reopening traffic and resuming backups. Before reopening writes, rollback is possible by stopping the new services, reverting both settings and starting the original PostgreSQL 18 project. Once PostgreSQL 19 has accepted new writes, reconcile them before returning to the old directory.
+
 Ready assets have encrypted chunks and an encrypted recovery manifest on the backup filesystem. Manifests retain original ingestion metadata; PostgreSQL is authoritative for later rename/visibility/tombstone changes. Always restore the database snapshot first and review audit/deletion history before importing older manifests. An asset deleted in a newer database state must not be resurrected from an old backup.
 
 ## Recovery drill

@@ -22,7 +22,7 @@ x-app-env: &app-env
   CACHE_LIMIT_BYTES: ${CACHE_LIMIT_BYTES:-10737418240}
 services:
   storage-init:
-    image: postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+    image: ${POSTGRES_IMAGE:-postgres:18.7-alpine@sha256:0115267ab5a509022df9319c77be365cef335adb71556c75f60f5360ee247e71}
     user: "0:0"
     entrypoint: [/bin/sh, -ec]
     command:
@@ -41,14 +41,14 @@ services:
     security_opt: [no-new-privileges:true]
     mem_limit: 64m
   postgres:
-    image: postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+    image: ${POSTGRES_IMAGE:-postgres:18.7-alpine@sha256:0115267ab5a509022df9319c77be365cef335adb71556c75f60f5360ee247e71}
     environment:
       POSTGRES_USER: assethub
       POSTGRES_DB: assethub
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Generate a PostgreSQL password}
     ports: ["127.0.0.1:${POSTGRES_PORT:-5435}:5432"]
     volumes:
-      - ${DATA_ROOT:-/srv/assethub}/postgres:/var/lib/postgresql
+      - ${POSTGRES_DATA_ROOT:-${DATA_ROOT:-/srv/assethub}/postgres}:/var/lib/postgresql
     healthcheck:
       test: [CMD-SHELL, "pg_isready -U assethub -d assethub"]
       interval: 10s
@@ -58,7 +58,7 @@ services:
     mem_limit: 2g
     cpus: 2
   redis:
-    image: redis:8.10.2-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
+    image: redis:8.10.3-alpine@sha256:7958cfbb9d152f87dadfbc89f1b0b15938f0b81ff8982feb327476f4911935c3
     command:
       [
         redis-server,
@@ -175,7 +175,7 @@ services:
     mem_limit: 128m
     cpus: 1
   cloudflared:
-    image: cloudflare/cloudflared:2026.10.0@sha256:9b49eed8f62806d5d45ddf59ecefb5710429598ea6d3fcccd2af938f621b2b07
+    image: cloudflare/cloudflared:2026.11.1@sha256:e613aadbc2d9511785d2e67a86b0c8ac18dd63a3f9af0d06faf04cbfdcb35f2d
     profiles: [tunnel]
     command: [tunnel, --no-autoupdate, run]
     environment:
